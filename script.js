@@ -230,6 +230,42 @@ waveformSelect.addEventListener('change', () => {
     resetOscillatorPools();
 });
 
+// Clickable kbd elements
+document.querySelectorAll('kbd').forEach(kbd => {
+    const key = kbd.textContent.toLowerCase();
+
+    kbd.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        playNote(key);
+    });
+
+    kbd.addEventListener('mouseup', (event) => {
+        event.preventDefault();
+        if (!sustainPedal) {
+            stopNote(key);
+        }
+    });
+
+    kbd.addEventListener('mouseleave', (event) => {
+        event.preventDefault();
+        if (!sustainPedal) {
+            stopNote(key);
+        }
+    });
+
+    kbd.addEventListener('touchstart', (event) => {
+        event.preventDefault();
+        playNote(key);
+    });
+
+    kbd.addEventListener('touchend', (event) => {
+        event.preventDefault();
+        if (!sustainPedal) {
+            stopNote(key);
+        }
+    });
+});
+
 // Initial Setup
 window.addEventListener('load', () => {
     if (!(window.AudioContext || window.webkitAudioContext)) {
