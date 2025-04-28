@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Super Deluxe Synth - Octave Shift Explained</title>
+    <title>Super Deluxe Synth - Note Display</title>
     <style>
         body {
             font-family: sans-serif;
@@ -45,6 +45,12 @@
             color: #555;
             margin-top: 5px;
         }
+        #note-display {
+            font-size: 1.5em;
+            margin: 15px;
+            color: #333;
+            min-height: 30px;
+        }
     </style>
 </head>
 <body>
@@ -70,6 +76,8 @@
 
     <div>Octave Shift: <span id="octave-shift-display">0</span></div>
     <div class="instructions">Use ↑ and ↓ arrow keys to shift octaves up and down.</div>
+
+    <div id="note-display">&nbsp;</div>
 
     <div id="keyboard">
         <div class="row">
