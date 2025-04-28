@@ -1,178 +1,247 @@
 // --- Audio Setup ---
 let audioContext;
-const fadeoutTime = 0.5; // Fadeout time in seconds (adjust as needed)
+const fadeoutTime = 0.3; // Slightly shorter fadeout might feel more responsive
+const attackTime = 0.005; // Very short attack to prevent clicks, minimal latency impact
+const releaseTime = fadeoutTime; // Keep consistent naming
 
-// Function to initialize the Audio Context (must be called on user interaction)
-function initAudio() {
-    if (!audioContext) {
-        try {
-            // Standard way
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            console.log("AudioContext created successfully.");
-            // Hide warning if audio is enabled
-            const warning = document.getElementById('audio-warning');
-            if (warning) warning.style.display = 'none';
-        } catch (e) {
-            console.error("Web Audio API is not supported in this browser", e);
-            alert("Web Audio API is not supported in this browser.");
+// DOM Elements for status and interaction
+const statusDiv = document.getElementById('audio-status');
+const kbdElements = {}; // Cache kbd elements for faster access
+document.querySelectorAll('kbd').forEach(kbd => {
+    kbdElements[kbd.textContent.toLowerCase()] = kbd;
+});
+
+
+// Function to initialize/resume the Audio Context
+function initializeAudio() {
+    return new Promise((resolve, reject) => {
+        if (audioContext && audioContext.state === 'running') {
+            resolve();
+            return;
         }
-    }
-    // Resume context if it's suspended (often happens on page load)
-    if (audioContext && audioContext.state === 'suspended') {
-        audioContext.resume();
-        console.log("AudioContext resumed.");
+
+        try {
+            if (!audioContext) {
+                // Request lowest latency ('interactive')
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    latencyHint: 'interactive',
+                    // sampleRate: 44100 // Optionally match sample rate if needed, usually default is fine
+                });
+                console.log("AudioContext created.");
+                updateAudioStatus(); // Update status immediately after creation
+            }
+
+            // Always try to resume, in case it was suspended or closed
+            audioContext.resume().then(() => {
+                console.log("AudioContext resumed.");
+                updateAudioStatus();
+                // Remove interaction listeners once running
+                document.body.removeEventListener('click', handleInteraction);
+                document.body.removeEventListener('touchstart', handleInteraction);
+                window.removeEventListener('keydown', handleInteraction);
+                resolve();
+            }).catch(e => {
+                console.error("AudioContext resume failed:", e);
+                updateAudioStatus("Error resuming audio.", "error");
+                reject(e);
+            });
+
+        } catch (e) {
+            console.error("Web Audio API is not supported or AudioContext creation failed:", e);
+            updateAudioStatus("Web Audio API not supported.", "error");
+            reject(e);
+        }
+    });
+}
+
+// Update visual status indicator
+function updateAudioStatus(message = '', type = '') {
+    if (!statusDiv) return;
+
+    if (type === 'error') {
+        statusDiv.textContent = message || "Error initializing audio.";
+        statusDiv.className = 'error';
+    } else if (!audioContext) {
+         statusDiv.textContent = message || "Audio not initialized.";
+         statusDiv.className = 'error'; // Treat no context as an error state visually
+    } else if (audioContext.state === 'running') {
+        statusDiv.textContent = message || "Audio Ready";
+        statusDiv.className = 'ready';
+    } else if (audioContext.state === 'suspended') {
+        statusDiv.textContent = message || "Click or press a key to enable audio";
+        statusDiv.className = 'suspended';
+    } else if (audioContext.state === 'closed') {
+        statusDiv.textContent = message || "Audio context closed.";
+        statusDiv.className = 'error';
     }
 }
 
-// --- Key to Frequency Mapping ---
+// --- Key to Frequency Mapping (Unchanged) ---
 const keyToFrequency = {
-    'q': 261.63,  // C4
-    '2': 277.18,  // C#4/Db4
-    'w': 293.66,  // D4
-    '3': 311.13,  // D#4/Eb4
-    'e': 329.63,  // E4
-    'r': 349.23,  // F4
-    '5': 369.99,  // F#4/Gb4
-    't': 392.00,  // G4
-    '6': 415.30,  // G#4/Ab4
-    'y': 440.00,  // A4
-    '7': 466.16,  // A#4/Bb4
-    'u': 493.88,  // B4
-    'i': 523.25,  // C5
-    '9': 554.37,  // C#5/Db5
-    'o': 587.33,  // D5
-    '0': 622.25,  // D#5/Eb5
-    'p': 659.26,  // E5
-    'a': 698.46,  // F5
-    'z': 739.99,  // F#5/Gb5
-    's': 783.99,  // G5
-    'x': 830.61,  // G#5/Ab5
-    'd': 880.00,  // A5
-    'c': 932.33,  // A#5/Bb5
-    'f': 987.77,  // B5
-    'g': 1046.50, // C6
-    'h': 1108.73, // C#6/Db6
-    'j': 1174.66, // D6
-    'k': 1244.51, // D#6/Eb6
-    'l': 1318.51  // E6
+    'q': 261.63, '2': 277.18, 'w': 293.66, '3': 311.13, 'e': 329.63, 'r': 349.23,
+    '5': 369.99, 't': 392.00, '6': 415.30, 'y': 440.00, '7': 466.16, 'u': 493.88,
+    'i': 523.25, '9': 554.37, 'o': 587.33, '0': 622.25, 'p': 659.26, 'a': 698.46,
+    'z': 739.99, 's': 783.99, 'x': 830.61, 'd': 880.00, 'c': 932.33, 'f': 987.77,
+    'g': 1046.50, 'h': 1108.73, 'j': 1174.66, 'k': 1244.51, 'l': 1318.51
 };
 
 // --- Store Playing Sounds ---
-// We store { oscillator: OscillatorNode, gainNode: GainNode } for each key
+// { oscillator: OscillatorNode, gainNode: GainNode }
 const playingSounds = {};
 
 // --- Sound Generation and Control ---
 
 function playNote(key) {
-    if (!audioContext) {
-        console.warn("AudioContext not initialized. Cannot play note.");
-        const warning = document.getElementById('audio-warning');
-        if (warning) warning.style.display = 'block'; // Show warning
+    // 1. Ensure AudioContext is ready
+    if (!audioContext || audioContext.state !== 'running') {
+        console.warn("AudioContext not running. Note blocked.");
+        // Attempt to initialize/resume if suspended - might help if user clicks status
+        if (audioContext && audioContext.state === 'suspended') {
+            initializeAudio();
+        } else if (!audioContext) {
+             updateAudioStatus("Click or press a key to enable audio", "suspended");
+        }
         return;
     }
-    if (playingSounds[key]) return; // Already playing this key
+    // 2. Prevent re-triggering if already playing (keydown repeat or holding)
+    if (playingSounds[key]) return;
 
     const frequency = keyToFrequency[key];
     if (!frequency) return; // Key not mapped
 
-    // Create nodes
+    const now = audioContext.currentTime;
+
+    // 3. Create nodes (inevitable for polyphony with varying frequencies)
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
 
-    // Configure nodes
-    oscillator.type = 'sine'; // Same as the Python example
-    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+    // 4. Configure nodes precisely
+    oscillator.type = 'sine';
+    // Set frequency immediately - setValueAtTime is precise
+    oscillator.frequency.setValueAtTime(frequency, now);
 
-    // Connect nodes: oscillator -> gain -> destination (speakers)
+    // 5. Envelope: Quick attack to prevent clicks, then hold at full volume
+    gainNode.gain.setValueAtTime(0, now); // Start at 0 gain
+    gainNode.gain.linearRampToValueAtTime(1, now + attackTime); // Ramp up quickly
+
+    // 6. Connect nodes: oscillator -> gain -> destination
     oscillator.connect(gainNode);
     gainNode.connect(audioContext.destination);
 
-    // Start the oscillator
-    oscillator.start(0); // Start immediately
+    // 7. Start oscillator slightly in the future IF attackTime > 0, else start now
+    // Starting immediately (0) is generally best for lowest latency perception.
+    // The attack ramp handles the initial silence.
+    oscillator.start(now);
 
-    // Store references for stopping later
+    // 8. Store references
     playingSounds[key] = { oscillator, gainNode };
 
-    // Optional: Add visual feedback (e.g., change key style)
-    const kbdElement = Array.from(document.querySelectorAll('kbd')).find(kbd => kbd.textContent === key);
-    if (kbdElement) {
-        kbdElement.style.backgroundColor = '#ccc';
-        kbdElement.style.boxShadow = 'inset 1px 1px 1px #999';
+    // 9. Visual feedback (using cached element)
+    if (kbdElements[key]) {
+        kbdElements[key].classList.add('active');
     }
 }
 
 function stopNote(key) {
-    if (!audioContext || !playingSounds[key]) return; // Not playing or context not ready
+    if (!audioContext || !playingSounds[key]) return;
 
     const { oscillator, gainNode } = playingSounds[key];
     const now = audioContext.currentTime;
 
-    // Start fade out
-    gainNode.gain.setValueAtTime(gainNode.gain.value, now); // Set current value as start point
-    gainNode.gain.linearRampToValueAtTime(0.0001, now + fadeoutTime); // Fade to near zero
+    // 1. Envelope: Fade out smoothly
+    // Cancel any scheduled gain changes first to avoid conflicts
+    gainNode.gain.cancelScheduledValues(now);
+    // Start ramp from current value
+    gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+    // Ramp down to near zero
+    gainNode.gain.linearRampToValueAtTime(0.0001, now + releaseTime);
 
-    // Schedule oscillator stop after fadeout is complete
-    oscillator.stop(now + fadeoutTime);
+    // 2. Schedule oscillator stop after the release ramp finishes
+    oscillator.stop(now + releaseTime);
 
-    // Remove from playing sounds *immediately* so keydown can trigger again if needed
+    // 3. Remove from playing sounds immediately
+    // (Important: do this *before* the oscillator actually stops)
     delete playingSounds[key];
 
-    // Optional: Remove visual feedback
-    const kbdElement = Array.from(document.querySelectorAll('kbd')).find(kbd => kbd.textContent === key);
-    if (kbdElement) {
-        kbdElement.style.backgroundColor = '#eee'; // Reset style
-        kbdElement.style.boxShadow = '1px 1px 1px #999';
+    // 4. Remove visual feedback (using cached element)
+     if (kbdElements[key]) {
+        kbdElements[key].classList.remove('active');
     }
 }
 
 // --- Event Listeners ---
 
-// Use 'key' property for modern browsers, convert to lowercase
+// Handle initial user interaction to unlock audio
+function handleInteraction() {
+    initializeAudio().catch(err => {
+        // Error already logged in initializeAudio
+        updateAudioStatus("Failed to initialize audio.", "error");
+    });
+    // Subsequent key presses will also try to init if needed
+}
+
+
 window.addEventListener('keydown', (event) => {
-    // Initialize audio on first key press if needed
-    if (!audioContext || audioContext.state === 'suspended') {
-        initAudio();
+    // Attempt to initialize audio if it's not running yet
+    // This covers cases where the initial click/touch listener wasn't triggered
+    if (!audioContext || audioContext.state !== 'running') {
+        initializeAudio(); // Try to start it, playNote will check state again
     }
-    // Don't play if modifier keys are pressed (except Shift if needed, though unnecessary here)
-    // or if it's repeating (event.repeat)
-    if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) {
+
+    // Ignore key repeats and modifier keys
+    if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) {
         return;
     }
+
     const key = event.key.toLowerCase();
     playNote(key);
 });
 
 window.addEventListener('keyup', (event) => {
-    if (!audioContext) return;
+    // No need to check audioContext state here, stopNote handles it
     const key = event.key.toLowerCase();
     stopNote(key);
 });
 
 
-// Attempt to initialize AudioContext on first user interaction (click or touch)
-// This is often required by browsers for audio playback policies.
-function setupAudioOnInteraction() {
-    initAudio();
-    // Remove these listeners once the context is running
-    document.body.removeEventListener('click', setupAudioOnInteraction);
-    document.body.removeEventListener('touchstart', setupAudioOnInteraction);
-    window.removeEventListener('keydown', setupAudioOnInteraction); // Also remove from keydown
-}
+// --- Initial Setup ---
 
-document.body.addEventListener('click', setupAudioOnInteraction, { once: true });
-document.body.addEventListener('touchstart', setupAudioOnInteraction, { once: true });
-// Also try to initialize on the very first keydown, just in case click/touch doesn't happen
-window.addEventListener('keydown', setupAudioOnInteraction, { once: true });
-
-// Show warning initially if context might not be ready
+// Set initial status message on load
 window.addEventListener('load', () => {
-    // Check if context exists and is running after load (unlikely but possible)
      if (!(window.AudioContext || window.webkitAudioContext)) {
-         const warning = document.getElementById('audio-warning');
-         if(warning) warning.textContent = "Your browser doesn't support the Web Audio API.";
-         if(warning) warning.style.display = 'block';
-     } else if (!audioContext || audioContext.state !== 'running') {
-         const warning = document.getElementById('audio-warning');
-         if (warning) warning.style.display = 'block';
+         updateAudioStatus("Browser doesn't support Web Audio API.", "error");
+     } else {
+         // Create context suspended initially if possible, or show prompt
+         try {
+              // Try creating context immediately but expect it to be suspended
+              if (!audioContext) {
+                  audioContext = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+                   // Check state *after* creation attempt
+                   if (audioContext.state === 'suspended') {
+                       updateAudioStatus("Click or press a key to enable audio", "suspended");
+                       // Add listeners ONLY if suspended
+                       document.body.addEventListener('click', handleInteraction, { once: true });
+                       document.body.addEventListener('touchstart', handleInteraction, { once: true });
+                       window.addEventListener('keydown', handleInteraction, { once: true }); // Also listen for first keydown
+                   } else if (audioContext.state === 'running') {
+                       updateAudioStatus("Audio Ready", "ready"); // Should be rare on load
+                   } else {
+                        updateAudioStatus("Audio context state: " + audioContext.state, "error");
+                   }
+              } else {
+                   // If context already exists (e.g., from previous interaction attempts)
+                   updateAudioStatus();
+              }
+         } catch (e) {
+              console.error("Error creating initial AudioContext:", e);
+              updateAudioStatus("Failed to initialize audio.", "error");
+         }
      }
+});
+
+// Make the status div clickable to attempt resume if suspended
+statusDiv.addEventListener('click', () => {
+    if (audioContext && audioContext.state === 'suspended') {
+        initializeAudio();
+    }
 });
