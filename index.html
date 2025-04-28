@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Super Deluxe Synth - Volume + Octave Shift</title>
+    <title>Super Deluxe Synth - Working Keys Only</title>
     <style>
         body {
             font-family: sans-serif;
@@ -19,6 +19,12 @@
         }
         #audio-status.error, #audio-status.suspended {
             color: red;
+        }
+        #keyboard {
+            margin-top: 20px;
+        }
+        .row {
+            margin: 5px 0;
         }
         kbd {
             display: inline-block;
@@ -60,11 +66,18 @@
     <div>Octave Shift: <span id="octave-shift-display">0</span></div>
 
     <div id="keyboard">
-        <p>
-            <kbd>q</kbd><kbd>2</kbd><kbd>w</kbd><kbd>3</kbd><kbd>e</kbd><kbd>r</kbd><kbd>5</kbd><kbd>t</kbd><kbd>6</kbd><kbd>y</kbd><kbd>7</kbd><kbd>u</kbd>
-            <kbd>i</kbd><kbd>9</kbd><kbd>o</kbd><kbd>0</kbd><kbd>p</kbd><kbd>a</kbd><kbd>z</kbd><kbd>s</kbd><kbd>x</kbd><kbd>d</kbd><kbd>c</kbd><kbd>f</kbd>
+        <div class="row">
+            <kbd>2</kbd><kbd>3</kbd><kbd>5</kbd><kbd>6</kbd><kbd>7</kbd><kbd>9</kbd><kbd>0</kbd>
+        </div>
+        <div class="row">
+            <kbd>q</kbd><kbd>w</kbd><kbd>e</kbd><kbd>r</kbd><kbd>t</kbd><kbd>y</kbd><kbd>u</kbd><kbd>i</kbd><kbd>o</kbd><kbd>p</kbd>
+        </div>
+        <div class="row">
+            <kbd>a</kbd><kbd>z</kbd><kbd>s</kbd><kbd>x</kbd><kbd>d</kbd><kbd>c</kbd><kbd>f</kbd>
+        </div>
+        <div class="row">
             <kbd>g</kbd><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd>
-        </p>
+        </div>
     </div>
 
     <script src="script.js"></script>
