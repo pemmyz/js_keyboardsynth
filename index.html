@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Super Deluxe Synth - Clickable Keys</title>
+    <title>Super Deluxe Synth - Volume + Octave Shift</title>
     <style>
         body {
             font-family: sans-serif;
@@ -49,6 +49,15 @@
         <option value="sawtooth">Sawtooth</option>
         <option value="triangle">Triangle</option>
     </select>
+
+    <br><br>
+
+    <label for="volume-slider">Volume:</label>
+    <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.25">
+
+    <br><br>
+
+    <div>Octave Shift: <span id="octave-shift-display">0</span></div>
 
     <div id="keyboard">
         <p>
