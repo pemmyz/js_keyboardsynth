@@ -1,17 +1,34 @@
 // --- Audio Setup ---
 let audioContext;
-const fadeoutTime = 0.2; // Slightly faster fadeout
-const attackTime = 0; // Instant attack for minimal latency
-const releaseTime = fadeoutTime; // Same for consistency
+const fadeoutTime = 0.2;
+const attackTime = 0.01;
+const releaseTime = fadeoutTime;
 
-// DOM Elements for status and interaction
+// DOM Elements
 const statusDiv = document.getElementById('audio-status');
-const kbdElements = {}; // Cache kbd elements for faster access
+const waveformSelect = document.getElementById('waveform-select');
+let currentWaveform = 'sine';
+const kbdElements = {};
 document.querySelectorAll('kbd').forEach(kbd => {
     kbdElements[kbd.textContent.toLowerCase()] = kbd;
 });
 
-// Function to initialize/resume the Audio Context
+// Key to Frequency Mapping
+const keyToFrequency = {
+    'q': 261.63, '2': 277.18, 'w': 293.66, '3': 311.13, 'e': 329.63, 'r': 349.23,
+    '5': 369.99, 't': 392.00, '6': 415.30, 'y': 440.00, '7': 466.16, 'u': 493.88,
+    'i': 523.25, '9': 554.37, 'o': 587.33, '0': 622.25, 'p': 659.26, 'a': 698.46,
+    'z': 739.99, 's': 783.99, 'x': 830.61, 'd': 880.00, 'c': 932.33, 'f': 987.77,
+    'g': 1046.50, 'h': 1108.73, 'j': 1174.66, 'k': 1244.51, 'l': 1318.51
+};
+
+// Polyphonic Oscillator Pools
+const oscillatorPools = {};
+const poolSizePerKey = 4;
+
+// Sustain pedal
+let sustainPedal = false;
+
 function initializeAudio() {
     return new Promise((resolve, reject) => {
         if (audioContext && audioContext.state === 'running') {
@@ -22,7 +39,7 @@ function initializeAudio() {
         try {
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                    latencyHint: 0 // Request lowest possible latency
+                    latencyHint: 0
                 });
                 console.log("AudioContext created.");
                 updateAudioStatus();
@@ -34,6 +51,7 @@ function initializeAudio() {
                 document.body.removeEventListener('click', handleInteraction);
                 document.body.removeEventListener('touchstart', handleInteraction);
                 window.removeEventListener('keydown', handleInteraction);
+                preCreateOscillatorPools();
                 resolve();
             }).catch(e => {
                 console.error("AudioContext resume failed:", e);
@@ -49,7 +67,6 @@ function initializeAudio() {
     });
 }
 
-// Update visual status indicator
 function updateAudioStatus(message = '', type = '') {
     if (!statusDiv) return;
 
@@ -71,20 +88,42 @@ function updateAudioStatus(message = '', type = '') {
     }
 }
 
-// --- Key to Frequency Mapping ---
-const keyToFrequency = {
-    'q': 261.63, '2': 277.18, 'w': 293.66, '3': 311.13, 'e': 329.63, 'r': 349.23,
-    '5': 369.99, 't': 392.00, '6': 415.30, 'y': 440.00, '7': 466.16, 'u': 493.88,
-    'i': 523.25, '9': 554.37, 'o': 587.33, '0': 622.25, 'p': 659.26, 'a': 698.46,
-    'z': 739.99, 's': 783.99, 'x': 830.61, 'd': 880.00, 'c': 932.33, 'f': 987.77,
-    'g': 1046.50, 'h': 1108.73, 'j': 1174.66, 'k': 1244.51, 'l': 1318.51
-};
+// Pre-create Oscillator Pools
+function preCreateOscillatorPools() {
+    for (const key in keyToFrequency) {
+        const frequency = keyToFrequency[key];
+        oscillatorPools[key] = [];
 
-// --- Store Playing Sounds ---
-const playingSounds = {};
+        for (let i = 0; i < poolSizePerKey; i++) {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
 
-// --- Sound Generation and Control ---
+            oscillator.type = currentWaveform;
+            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
 
+            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+            oscillator.start();
+
+            oscillatorPools[key].push({ oscillator, gainNode, busy: false });
+        }
+    }
+}
+
+// Reset oscillators when waveform changes
+function resetOscillatorPools() {
+    console.log("Resetting oscillators...");
+    for (const key in oscillatorPools) {
+        for (const sound of oscillatorPools[key]) {
+            sound.oscillator.stop();
+            sound.gainNode.disconnect();
+        }
+    }
+    preCreateOscillatorPools();
+}
+
+// Play and Stop Notes
 function playNote(key) {
     if (!audioContext || audioContext.state !== 'running') {
         console.warn("AudioContext not running. Note blocked.");
@@ -95,28 +134,23 @@ function playNote(key) {
         }
         return;
     }
-    if (playingSounds[key]) return;
 
-    const frequency = keyToFrequency[key];
-    if (!frequency) return;
+    const pool = oscillatorPools[key];
+    if (!pool) return;
+
+    const sound = pool.find(s => !s.busy);
+    if (!sound) {
+        console.warn(`No free oscillators for key "${key}"`);
+        return;
+    }
 
     const now = audioContext.currentTime;
 
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
+    sound.gainNode.gain.cancelScheduledValues(now);
+    sound.gainNode.gain.setValueAtTime(0, now);
+    sound.gainNode.gain.linearRampToValueAtTime(1, now + attackTime);
 
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(frequency, now);
-
-    // Instant attack: set gain immediately
-    gainNode.gain.setValueAtTime(1, now);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    oscillator.start(now);
-
-    playingSounds[key] = { oscillator, gainNode };
+    sound.busy = true;
 
     if (kbdElements[key]) {
         kbdElements[key].classList.add('active');
@@ -124,39 +158,51 @@ function playNote(key) {
 }
 
 function stopNote(key) {
-    if (!audioContext || !playingSounds[key]) return;
+    if (!audioContext) return;
 
-    const { oscillator, gainNode } = playingSounds[key];
+    const pool = oscillatorPools[key];
+    if (!pool) return;
+
     const now = audioContext.currentTime;
 
-    // Fade out smoothly
-    gainNode.gain.cancelScheduledValues(now);
-    gainNode.gain.setValueAtTime(gainNode.gain.value, now);
-    gainNode.gain.linearRampToValueAtTime(0.0001, now + releaseTime);
+    for (const sound of pool) {
+        if (sound.busy) {
+            sound.gainNode.gain.cancelScheduledValues(now);
+            sound.gainNode.gain.setValueAtTime(sound.gainNode.gain.value, now);
+            sound.gainNode.gain.linearRampToValueAtTime(0.0001, now + releaseTime);
 
-    oscillator.stop(now + releaseTime);
-
-    delete playingSounds[key];
+            sound.busy = false;
+        }
+    }
 
     if (kbdElements[key]) {
         kbdElements[key].classList.remove('active');
     }
 }
 
-// --- Event Listeners ---
-
+// Handle interactions
 function handleInteraction() {
     initializeAudio().catch(err => {
         updateAudioStatus("Failed to initialize audio.", "error");
     });
 }
 
+// Handle key events
 window.addEventListener('keydown', (event) => {
     if (!audioContext || audioContext.state !== 'running') {
         initializeAudio();
     }
 
-    if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) {
+    if (event.repeat) return;
+
+    if (event.code === "Space") {
+        sustainPedal = true;
+        console.log("Sustain pedal down");
+        event.preventDefault();
+        return;
+    }
+
+    if (event.metaKey || event.ctrlKey || event.altKey) {
         return;
     }
 
@@ -165,12 +211,26 @@ window.addEventListener('keydown', (event) => {
 });
 
 window.addEventListener('keyup', (event) => {
+    if (event.code === "Space") {
+        sustainPedal = false;
+        console.log("Sustain pedal up");
+        return;
+    }
+
     const key = event.key.toLowerCase();
-    stopNote(key);
+    if (!sustainPedal) {
+        stopNote(key);
+    }
 });
 
-// --- Initial Setup ---
+// Handle waveform change
+waveformSelect.addEventListener('change', () => {
+    currentWaveform = waveformSelect.value;
+    console.log("Waveform changed to", currentWaveform);
+    resetOscillatorPools();
+});
 
+// Initial Setup
 window.addEventListener('load', () => {
     if (!(window.AudioContext || window.webkitAudioContext)) {
         updateAudioStatus("Browser doesn't support Web Audio API.", "error");
@@ -185,6 +245,7 @@ window.addEventListener('load', () => {
                     window.addEventListener('keydown', handleInteraction, { once: true });
                 } else if (audioContext.state === 'running') {
                     updateAudioStatus("Audio Ready", "ready");
+                    preCreateOscillatorPools();
                 } else {
                     updateAudioStatus("Audio context state: " + audioContext.state, "error");
                 }

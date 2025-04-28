@@ -2,78 +2,61 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Keyboard Piano (Optimized)</title>
+    <title>Super Deluxe Synth</title>
     <style>
         body {
             font-family: sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background-color: #f0f0f0;
             text-align: center;
+            padding: 20px;
         }
-        #container { /* Added container for better centering */
-            background-color: #fff;
-            padding: 20px 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        kbd {
-            display: inline-block;
-            border: 1px solid #ccc;
-            box-shadow: 1px 1px 1px #999;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: monospace;
-            background-color: #eee;
-            margin: 2px;
-            font-size: 0.9em;
-            min-width: 1.5em; /* Ensure consistent width */
-            text-align: center;
-        }
-        kbd.active { /* Style for active key */
-             background-color: #aaa;
-             color: white;
-             box-shadow: inset 1px 1px 1px #777;
-             transform: scale(0.95); /* Subtle press effect */
-        }
-        h1 {
-          margin-top: 0;
-        }
-        #audio-status { /* Changed ID */
-            margin-top: 15px;
+        #audio-status {
+            margin: 10px;
+            padding: 10px;
             font-weight: bold;
         }
         #audio-status.ready {
-             color: green;
+            color: green;
         }
-        #audio-status.suspended {
-             color: orange;
-             cursor: pointer; /* Indicate it's clickable */
+        #audio-status.error, #audio-status.suspended {
+            color: red;
         }
-         #audio-status.error {
-             color: red;
+        kbd {
+            display: inline-block;
+            margin: 5px;
+            padding: 10px 15px;
+            border: 1px solid #333;
+            border-radius: 5px;
+            font-size: 1.5em;
+            background: #eee;
+        }
+        kbd.active {
+            background: #ff0;
         }
     </style>
 </head>
 <body>
-    <div id="container">
-        <h1>Web Keyboard Piano</h1>
-        <p>Press the corresponding keys on your keyboard to play notes.</p>
+
+    <h1>🎹 Super Deluxe Synth</h1>
+
+    <div id="audio-status">Loading...</div>
+
+    <label for="waveform-select">Waveform:</label>
+    <select id="waveform-select">
+        <option value="sine">Sine</option>
+        <option value="square">Square</option>
+        <option value="sawtooth">Sawtooth</option>
+        <option value="triangle">Triangle</option>
+    </select>
+
+    <div id="keyboard">
         <p>
-            Row 1: <kbd>q</kbd> <kbd>2</kbd> <kbd>w</kbd> <kbd>3</kbd> <kbd>e</kbd> <kbd>r</kbd> <kbd>5</kbd> <kbd>t</kbd> <kbd>6</kbd> <kbd>y</kbd> <kbd>7</kbd> <kbd>u</kbd>
+            <!-- Add all your kbd keys here -->
+            <kbd>q</kbd><kbd>2</kbd><kbd>w</kbd><kbd>3</kbd><kbd>e</kbd><kbd>r</kbd><kbd>5</kbd><kbd>t</kbd><kbd>6</kbd><kbd>y</kbd><kbd>7</kbd><kbd>u</kbd><kbd>i</kbd><kbd>9</kbd><kbd>o</kbd><kbd>0</kbd><kbd>p</kbd><kbd>a</kbd><kbd>z</kbd><kbd>s</kbd><kbd>x</kbd><kbd>d</kbd><kbd>c</kbd><kbd>f</kbd><kbd>g</kbd><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd>
         </p>
-        <p>
-            Row 2: <kbd>i</kbd> <kbd>9</kbd> <kbd>o</kbd> <kbd>0</kbd> <kbd>p</kbd> <kbd>a</kbd> <kbd>z</kbd> <kbd>s</kbd> <kbd>x</kbd> <kbd>d</kbd> <kbd>c</kbd> <kbd>f</kbd>
-        </p>
-        <p>
-            Row 3: <kbd>g</kbd> <kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd>
-        </p>
-        <div id="audio-status">Loading...</div>
     </div>
 
     <script src="script.js"></script>
+
 </body>
 </html>
+
