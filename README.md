@@ -1,17 +1,16 @@
 # js_keyboardsynth
 
+# 🎹 Web Audio Synthesizer
+
+🔧 **Definition**  
+A polyphonic software synthesizer implemented entirely in JavaScript, leveraging the Web Audio API for real-time audio synthesis. It does not use any pre-recorded audio samples, instead generating sound entirely from oscillators and gain nodes in real time.
+
 ## Play it now: https://pemmyz.github.io/js_keyboardsynth/
 
 ## Screenshots
 
 ### Game
 ![Game 1](screenshots/game_2.png)
-
-
-# 🎹 Web Audio Synthesizer
-
-🔧 **Definition**  
-A polyphonic software synthesizer implemented entirely in JavaScript, leveraging the Web Audio API for real-time audio synthesis. It does not use any pre-recorded audio samples, instead generating sound entirely from oscillators and gain nodes in real time.
 
 ---
 
