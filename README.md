@@ -8,8 +8,6 @@ A polyphonic software synthesizer implemented entirely in JavaScript, leveraging
 ## Play it now: https://pemmyz.github.io/js_keyboardsynth/
 
 ## Screenshots
-
-### Game
 ![Game 1](screenshots/game_2.png)
 
 ---
