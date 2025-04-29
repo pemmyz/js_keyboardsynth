@@ -1,6 +1,6 @@
 # js_keyboardsynth
 
-# 🎹 Web Audio Synthesizer
+# 🎹 Super Deluxe Synth
 
 🔧 **Definition**  
 A polyphonic software synthesizer implemented entirely in JavaScript, leveraging the Web Audio API for real-time audio synthesis. It does not use any pre-recorded audio samples, instead generating sound entirely from oscillators and gain nodes in real time.
