@@ -54,16 +54,23 @@
             background: #444;
             cursor: pointer;
             user-select: none;
-            transition: background 0.2s;
+            transition: background 0.2s, border 0.2s, color 0.2s;
         }
 
         body.light-mode kbd {
             background: #eee;
+            border: 1px solid #999;
         }
 
         kbd.active {
             background: #ff0;
             color: #000;
+        }
+
+        body.light-mode kbd.active {
+            background: #ff0;
+            color: #000;
+            /* no extra border change! */
         }
 
         .instructions {
@@ -93,6 +100,7 @@
             color: #fff;
             border: none;
             border-radius: 5px;
+            transition: background 0.3s, color 0.3s;
         }
 
         body.light-mode #dark-mode-toggle {
@@ -145,7 +153,7 @@
     </div>
 
     <script>
-        // Force dark mode on load
+        // Force dark mode on page load
         document.body.classList.remove('light-mode');
 
         const toggleBtn = document.getElementById('dark-mode-toggle');
@@ -163,7 +171,7 @@
 
         toggleBtn.addEventListener('click', () => {
             const isLight = body.classList.contains('light-mode');
-            setDarkMode(isLight); // toggle mode
+            setDarkMode(isLight); // toggle between dark and light
         });
 
         // Always start in dark mode
