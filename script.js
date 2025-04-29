@@ -10,7 +10,7 @@ const volumeSlider = document.getElementById('volume-slider');
 const octaveShiftDisplay = document.getElementById('octave-shift-display');
 const noteDisplay = document.getElementById('note-display');
 
-let currentWaveform = 'sine';
+let currentWaveform = waveformSelect.value;
 let globalVolume = 0.25;
 let octaveShift = 0;
 
