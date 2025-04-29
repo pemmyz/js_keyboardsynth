@@ -145,7 +145,9 @@
     </div>
 
     <script>
-        // Dark mode toggle logic
+        // Force dark mode on load
+        document.body.classList.remove('light-mode');
+
         const toggleBtn = document.getElementById('dark-mode-toggle');
         const body = document.body;
 
@@ -161,14 +163,11 @@
 
         toggleBtn.addEventListener('click', () => {
             const isLight = body.classList.contains('light-mode');
-            setDarkMode(isLight);
-            localStorage.setItem('darkMode', (!isLight).toString());
+            setDarkMode(isLight); // toggle mode
         });
 
-        // Default to dark mode on load
-        const saved = localStorage.getItem('darkMode');
-        const defaultDark = saved === null || saved === 'true';
-        setDarkMode(defaultDark);
+        // Always start in dark mode
+        setDarkMode(true);
     </script>
 
     <script src="script.js"></script>
