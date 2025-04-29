@@ -5,4 +5,4 @@
 ## Screenshots
 
 ### Game
-![Game 1](screenshots/game_1.png)
+![Game 1](screenshots/game_2.png)
