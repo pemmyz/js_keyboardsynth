@@ -11,7 +11,7 @@ const octaveShiftDisplay = document.getElementById('octave-shift-display');
 const noteDisplay = document.getElementById('note-display');
 
 let currentWaveform = waveformSelect.value;
-let globalVolume = 0.25;
+let globalVolume = 0.1;
 let octaveShift = 0;
 
 const baseKeyToFrequency = {
