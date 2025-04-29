@@ -11,7 +11,7 @@ A polyphonic software synthesizer implemented entirely in JavaScript, leveraging
 ![Game 1](screenshots/game_2.png)
 
 ---
-⚠️ **Warning:** If your computer is not fast enough to run this smoothly, then you might experience increased latency.  
+⚠️ **Warning:** If your computer is not fast enough to run this smoothly, then you might experience increased latency and minor glitches.  
 In extreme cases, you might not hear any sound if you are running out of processing power.
 
 
