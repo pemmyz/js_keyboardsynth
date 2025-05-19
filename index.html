@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Super Deluxe Synth - Note Display</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <style>
         :root {
             color-scheme: dark light;
@@ -15,6 +16,8 @@
             background-color: #121212;
             color: #e0e0e0;
             transition: background-color 0.3s, color 0.3s;
+            /* For touch interaction, prevent page scroll when interacting with keyboard */
+            touch-action: manipulation;
         }
 
         body.light-mode {
@@ -38,6 +41,10 @@
 
         #keyboard {
             margin-top: 20px;
+            user-select: none; /* Prevent text selection when dragging over keys */
+            -webkit-user-select: none; /* Safari */
+            -moz-user-select: none; /* Firefox */
+            -ms-user-select: none; /* IE */
         }
 
         .row {
@@ -53,7 +60,6 @@
             font-size: 1.5em;
             background: #444;
             cursor: pointer;
-            user-select: none;
             transition: background 0.2s, border 0.2s, color 0.2s;
         }
 
@@ -70,7 +76,6 @@
         body.light-mode kbd.active {
             background: #ff0;
             color: #000;
-            /* no extra border change! */
         }
 
         .instructions {
@@ -133,9 +138,9 @@
     <br><br>
 
     <div>Octave Shift: <span id="octave-shift-display">0</span></div>
-    <div class="instructions">Use ↑ and ↓ arrow keys to shift octaves up and down.</div>
+    <div class="instructions">Use ↑ and ↓ arrow keys to shift octaves up and down. Space for sustain.</div>
 
-    <div id="note-display">&nbsp;</div>
+    <div id="note-display"> </div>
 
     <div id="keyboard">
         <div class="row">
@@ -153,9 +158,8 @@
     </div>
 
     <script>
-        // Force dark mode on page load
+        // Dark mode toggle logic
         document.body.classList.remove('light-mode');
-
         const toggleBtn = document.getElementById('dark-mode-toggle');
         const body = document.body;
 
@@ -168,18 +172,14 @@
                 toggleBtn.textContent = '🌙 Dark Mode';
             }
         }
-
         toggleBtn.addEventListener('click', () => {
             const isLight = body.classList.contains('light-mode');
-            setDarkMode(isLight); // toggle between dark and light
+            setDarkMode(isLight);
         });
-
-        // Always start in dark mode
-        setDarkMode(true);
+        setDarkMode(true); // Always start in dark mode
     </script>
 
     <script src="script.js"></script>
 
 </body>
 </html>
-
