@@ -4,118 +4,11 @@
     <meta charset="UTF-8">
     <title>Super Deluxe Synth - Note Display</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <style>
-        :root {
-            color-scheme: dark light;
-        }
-
-        body {
-            font-family: sans-serif;
-            text-align: center;
-            padding: 20px;
-            background-color: #121212;
-            color: #e0e0e0;
-            transition: background-color 0.3s, color 0.3s;
-            /* For touch interaction, prevent page scroll when interacting with keyboard */
-            touch-action: manipulation;
-        }
-
-        body.light-mode {
-            background-color: #fff;
-            color: #000;
-        }
-
-        #audio-status {
-            margin: 10px;
-            padding: 10px;
-            font-weight: bold;
-        }
-
-        #audio-status.ready {
-            color: #0f0;
-        }
-
-        #audio-status.error, #audio-status.suspended {
-            color: #f55;
-        }
-
-        #keyboard {
-            margin-top: 20px;
-            user-select: none; /* Prevent text selection when dragging over keys */
-            -webkit-user-select: none; /* Safari */
-            -moz-user-select: none; /* Firefox */
-            -ms-user-select: none; /* IE */
-        }
-
-        .row {
-            margin: 5px 0;
-        }
-
-        kbd {
-            display: inline-block;
-            margin: 5px;
-            padding: 10px 15px;
-            border: 1px solid #333;
-            border-radius: 5px;
-            font-size: 1.5em;
-            background: #444;
-            cursor: pointer;
-            transition: background 0.2s, border 0.2s, color 0.2s;
-        }
-
-        body.light-mode kbd {
-            background: #eee;
-            border: 1px solid #999;
-        }
-
-        kbd.active {
-            background: #ff0;
-            color: #000;
-        }
-
-        body.light-mode kbd.active {
-            background: #ff0;
-            color: #000;
-        }
-
-        .instructions {
-            font-size: 1em;
-            color: #aaa;
-            margin-top: 5px;
-        }
-
-        body.light-mode .instructions {
-            color: #555;
-        }
-
-        #note-display {
-            font-size: 1.5em;
-            margin: 15px;
-            min-height: 30px;
-        }
-
-        #dark-mode-toggle {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            padding: 6px 12px;
-            font-size: 0.9em;
-            cursor: pointer;
-            background: #333;
-            color: #fff;
-            border: none;
-            border-radius: 5px;
-            transition: background 0.3s, color 0.3s;
-        }
-
-        body.light-mode #dark-mode-toggle {
-            background: #ddd;
-            color: #000;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
+    <button id="toggle-panel-btn">🎹 Seq</button>
+    <button id="toggle-effects-panel-btn">🎛️ FX</button> {/* Added Effects Panel Toggle */}
     <button id="dark-mode-toggle">☀️ Light Mode</button>
 
     <h1>🎹 Super Deluxe Synth</h1>
@@ -124,11 +17,28 @@
 
     <label for="waveform-select">Waveform:</label>
     <select id="waveform-select">
+        <option id="dynamic-default-waveform-option" value="" hidden>Default (---)</option>
         <option value="sine">Sine</option>
         <option value="square" selected>Square</option>
         <option value="sawtooth">Sawtooth</option>
         <option value="triangle">Triangle</option>
+        <option value="pwm">PWM</option>
+        <option value="fm">FM</option>
+        <option value="am">AM</option>
+        <option value="ring">Ring Mod</option>
     </select>
+
+    <br><br>
+
+    <label for="unison-voices-slider">Unison Voices:</label>
+    <input type="range" id="unison-voices-slider" min="1" max="5" step="1" value="1">
+    <span id="unison-voices-display">1</span>
+
+    <br><br>
+
+    <label for="unison-detune-slider">Detune (cents):</label>
+    <input type="range" id="unison-detune-slider" min="0" max="50" step="1" value="0">
+    <span id="unison-detune-display">0</span>
 
     <br><br>
 
@@ -138,7 +48,7 @@
     <br><br>
 
     <div>Octave Shift: <span id="octave-shift-display">0</span></div>
-    <div class="instructions">Use ↑ and ↓ arrow keys to shift octaves up and down. Space for sustain.</div>
+    <div class="instructions">Use ↑ and ↓ arrow keys to shift octaves. Space for sustain.</div>
 
     <div id="note-display"> </div>
 
@@ -157,29 +67,85 @@
         </div>
     </div>
 
-    <script>
-        // Dark mode toggle logic
-        document.body.classList.remove('light-mode');
-        const toggleBtn = document.getElementById('dark-mode-toggle');
-        const body = document.body;
+    <div id="side-panel">
+        <h2>Sequencer</h2>
+        <button id="record-btn">⏺️ Record</button>
+        <button id="play-btn" disabled>▶️ Play</button>
+        <button id="stop-playback-btn" disabled>⏹️ Stop Playback</button>
+        <textarea id="note-sequence-display" placeholder="Recorded notes will appear here... (Editable for JSON paste)"></textarea>
+        <div id="sequence-clipboard-buttons">
+            <button id="copy-sequence-btn">📄 Copy</button>
+            <button id="paste-sequence-btn">📋 Paste</button>
+        </div>
+        <button id="export-btn" disabled>📤 Export Sequence</button>
+        <label for="import-file-input" class="button-like-label">📥 Import Sequence</label>
+        <input type="file" id="import-file-input" accept=".json">
+        <button id="clear-sequence-btn">🗑️ Clear Sequence</button>
+    </div>
 
-        function setDarkMode(enabled) {
-            if (enabled) {
-                body.classList.remove('light-mode');
-                toggleBtn.textContent = '☀️ Light Mode';
-            } else {
-                body.classList.add('light-mode');
-                toggleBtn.textContent = '🌙 Dark Mode';
-            }
-        }
-        toggleBtn.addEventListener('click', () => {
-            const isLight = body.classList.contains('light-mode');
-            setDarkMode(isLight);
-        });
-        setDarkMode(true); // Always start in dark mode
-    </script>
+    {/* New Effects Panel */}
+    <div id="effects-panel">
+        <h2>Effects</h2>
+        <div class="effect-group">
+            <h3>Reverb</h3>
+            <label for="reverb-mix">Mix:</label>
+            <input type="range" id="reverb-mix" min="0" max="1" step="0.01" value="0" disabled>
+            <span id="reverb-mix-display">0</span>
+            <p>(Coming Soon)</p>
+        </div>
+        <div class="effect-group">
+            <h3>Delay</h3>
+            <label for="delay-time">Time (s):</label>
+            <input type="range" id="delay-time" min="0.05" max="2" step="0.01" value="0.5" disabled>
+            <span id="delay-time-display">0.5</span>
+            <label for="delay-feedback">Feedback:</label>
+            <input type="range" id="delay-feedback" min="0" max="0.95" step="0.01" value="0.3" disabled>
+            <span id="delay-feedback-display">0.3</span>
+            <label for="delay-mix">Mix:</label>
+            <input type="range" id="delay-mix" min="0" max="1" step="0.01" value="0" disabled>
+            <span id="delay-mix-display">0</span>
+            <p>(Coming Soon)</p>
+        </div>
+        <div class="effect-group">
+            <h3>Distortion / Overdrive</h3>
+            <label for="distortion-amount">Amount:</label>
+            <input type="range" id="distortion-amount" min="0" max="100" step="1" value="0" disabled>
+            <span id="distortion-amount-display">0</span>
+             <label for="distortion-type">Type:</label>
+            <select id="distortion-type" disabled>
+                <option value="overdrive">Overdrive</option>
+                <option value="distortion">Distortion</option>
+                <option value="fuzz">Fuzz</option>
+                <option value="bitcrush">Bitcrusher</option>
+            </select>
+            <p>(Coming Soon)</p>
+        </div>
+        <div class="effect-group">
+            <h3>Chorus / Flanger / Phaser</h3>
+            <label for="mod-effect-rate">Rate (Hz):</label>
+            <input type="range" id="mod-effect-rate" min="0.1" max="10" step="0.1" value="1" disabled>
+            <span id="mod-effect-rate-display">1.0</span>
+            <label for="mod-effect-depth">Depth:</label>
+            <input type="range" id="mod-effect-depth" min="0" max="1" step="0.01" value="0.02" disabled>
+            <span id="mod-effect-depth-display">0.02</span>
+            <label for="mod-effect-type">Type:</label>
+            <select id="mod-effect-type" disabled>
+                <option value="chorus">Chorus</option>
+                <option value="flanger">Flanger</option>
+                <option value="phaser">Phaser</option>
+            </select>
+            <p>(Coming Soon)</p>
+        </div>
+        <div class="effect-group">
+            <h3>Stereo Spread</h3>
+            <label for="stereo-spread-amount">Amount:</label>
+            <input type="range" id="stereo-spread-amount" min="0" max="1" step="0.01" value="0" disabled>
+            <span id="stereo-spread-amount-display">0</span>
+            <p>(Coming Soon)</p>
+        </div>
+    </div>
+
 
     <script src="script.js"></script>
-
 </body>
 </html>
