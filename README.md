@@ -18,7 +18,7 @@ In extreme cases, you might not hear any sound if you are running out of process
 🧠 **Key Features**
 
 - **Oscillator-Based Sound Generation**  
-  Uses built-in waveform types (`sine`, `square`, `sawtooth`, `triangle`) from the `OscillatorNode`.
+  Uses built-in waveform types (`sine`, `square`, `sawtooth`, `triangle`, `PWM`,`FM`,`AM`,`Ring Mod`) from the `OscillatorNode`.
 
 - **Polyphony with Oscillator Pooling**  
   Supports multiple simultaneous notes (polyphony) by maintaining pools of oscillators per key.
