@@ -577,8 +577,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         physicallyDownKeys.delete(key); if (baseKeyToFrequency[key]) stopNote(key);
     });
-    volumeSlider.addEventListener('input', () => { globalVolume = parseFloat(volumeSlider.value); });
-    volumeSlider.addEventListener('change', () => { volumeSlider.blur(); });
+
+    volumeSlider.addEventListener('input', () => {
+        globalVolume = parseFloat(volumeSlider.value);
+    });
+
+    volumeSlider.addEventListener('change', () => {
+        const newVolume = parseFloat(volumeSlider.value);
+        // Update all notes in the sequence with the new volume
+        if (recordedSequence.length > 0) {
+            recordedSequence.forEach(note => {
+                note.volume = newVolume;
+            });
+            // Refresh the display to show the new values
+            updateSequenceDisplay(-1);
+            noteDisplay.textContent = "Sequence Volume Updated";
+            setTimeout(() => { if (noteDisplay.textContent === "Sequence Volume Updated") noteDisplay.textContent = ' '; }, 2000);
+        }
+        volumeSlider.blur();
+    });
 
     if (unisonVoicesSlider) {
         unisonVoicesSlider.addEventListener('input', () => {
