@@ -885,20 +885,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (recordedSequence.length === 0 || isRecording || isPlayingBack) {
             updateSequencerControls(); playBtn.blur(); return;
         }
-        initializeAudio().then(() => { playSequence(); playBtn.blur(); })
+        initializeAudio().then(() => {
+            // Setup for the whole looping session
+            isPlayingBack = true;
+            updateSequencerControls();
+            noteDisplay.textContent = "PLAY ▶️";
+            document.querySelectorAll('kbd.active').forEach(k => k.classList.remove('active'));
+            if (document.activeElement !== sequenceDisplay && sidePanel && sidePanel.classList.contains('visible')) {
+                 sequenceDisplay.focus({ preventScroll: true });
+            }
+
+            playSequence(); // Kick off the first loop
+            playBtn.blur();
+        })
         .catch(err => { console.error("Audio init failed for play:", err); playBtn.blur(); });
     });
 
     stopPlaybackBtn.addEventListener('click', () => { stopSequencePlayback(true); stopPlaybackBtn.blur(); });
 
     function playSequence() {
-        if (isPlayingBack || recordedSequence.length === 0) return;
-        isPlayingBack = true; updateSequencerControls(); noteDisplay.textContent = "PLAY ▶️";
-        document.querySelectorAll('kbd.active').forEach(k => k.classList.remove('active'));
+        if (!isPlayingBack) return; // Escape hatch for the loop
+
+        // This part runs for every loop:
+        playbackTimeouts.forEach(t => clearTimeout(t.id));
+        playbackTimeouts = [];
         activePlaybackNoteSounds.clear();
-        if (document.activeElement !== sequenceDisplay && sidePanel && sidePanel.classList.contains('visible')) {
-             sequenceDisplay.focus({ preventScroll: true });
-        }
         updateSequenceDisplay(-1);
 
         recordedSequence.forEach((noteData, index) => {
@@ -925,13 +936,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     stopNote(noteData.key, false, true, soundsToActuallyStopArray, noteSpecificReleaseTime);
                     activePlaybackNoteSounds.delete(uniqueNoteId);
                 }
-                if (index === recordedSequence.length -1) {
-                    setTimeout(() => {
-                        if (!isPlayingBack && noteDisplay.textContent.endsWith('(Seq)')) {
-                            noteDisplay.textContent = ' ';
-                        }
-                    }, (noteSpecificReleaseTime * 1000) + 50);
-                }
             }, stopTime * 1000);
             playbackTimeouts.push({ type: 'stop', id: stopTimeoutId, key: noteData.key, uniqueNoteId });
         });
@@ -939,14 +943,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const lastNote = recordedSequence[recordedSequence.length - 1];
         const lastNoteRelTime = lastNote.releaseTime !== undefined ? lastNote.releaseTime : releaseTime;
         const sequenceDuration = lastNote.startTime + lastNote.duration + lastNoteRelTime + 0.1;
-        const endPlaybackTimeoutId = setTimeout(() => {
+
+        // Schedule the next loop
+        const loopTimeoutId = setTimeout(() => {
             if (isPlayingBack) {
-                stopSequencePlayback(false);
-                noteDisplay.textContent = "PLAY ⏹️";
-                 setTimeout(() => { if(noteDisplay.textContent === "PLAY ⏹️") noteDisplay.textContent = ' ';}, 1500);
+                playSequence(); // Call self to loop
             }
         }, sequenceDuration * 1000);
-        playbackTimeouts.push({ type: 'end', id: endPlaybackTimeoutId });
+        playbackTimeouts.push({ type: 'loop', id: loopTimeoutId });
     }
 
     function forceStopAllPlaybackOscillators() {
