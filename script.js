@@ -54,6 +54,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let unisonVoices = 1;
     let detuneAmount = 0;
 
+    // --- Metronome and Turbo State ---
+    let isMetronomeOn = false;
+    let isTurboOn = false;
+    let bpm = 120;
+    let turboDivision = 16;
+    let schedulerIntervalId = null;
+    let nextNoteTime = 0.0;
+    let scheduleBeatCounter = 0;
+    let turboKeyDown = null;
+
 
     const DEFAULT_WAVEFORM_ON_PARSE = 'square';
     const JSON_EXPORT_COMMENT_HEADER = `// This is Super Deluxe Synth sequencer file,
@@ -119,6 +129,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // UI Elements for Effects Panel
     const effectsPanel = document.getElementById('effects-panel');
     const toggleEffectsPanelBtn = document.getElementById('toggle-effects-panel-btn');
+
+    // Metronome and Turbo UI Elements
+    const metronomeToggle = document.getElementById('metronome-toggle');
+    const bpmSlider = document.getElementById('bpm-slider');
+    const bpmDisplay = document.getElementById('bpm-display');
+    const turboToggle = document.getElementById('turbo-toggle');
+    const turboDivisionSelect = document.getElementById('turbo-division');
 
     const FM_MODULATOR_RATIO = 1.4;
     const FM_MODULATION_INDEX_SCALE = 2.0;
@@ -313,10 +330,10 @@ document.addEventListener('DOMContentLoaded', () => {
         sound.busy = false; sound.isPlayback = false; sound._currentWaveformType = null;
     }
 
-    function playNote(key, forPlayback = false, playbackNoteData = null) {
+    function playNote(key, forPlayback = false, playbackNoteData = null, fromTurbo = false) {
         if (!audioContext || audioContext.state !== 'running') {
             initializeAudio().then(() => {
-                if (audioContext.state === 'running') playNote(key, forPlayback, playbackNoteData);
+                if (audioContext.state === 'running') playNote(key, forPlayback, playbackNoteData, fromTurbo);
             }).catch(err => {});
             return null;
         }
@@ -432,7 +449,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (soundObjectsStarted.length === 0) return null;
         if (kbdElements[key]) kbdElements[key].classList.add('active');
-        if (!forPlayback) {
+        
+        if (!forPlayback && !fromTurbo) {
             noteDisplay.textContent = getNoteNameWithOctave(key, noteDataOctaveShiftValue);
         }
         if (!forPlayback && isRecording && !activeRecordingNotes[key]) {
@@ -525,15 +543,17 @@ document.addEventListener('DOMContentLoaded', () => {
     let isMouseButton1Down = false;
     let currentTouchedKeyForDrag = null;
     window.addEventListener('mousedown', (event) => {
-        if (event.target.closest('#side-panel') || event.target.closest('#effects-panel') || event.target.closest('#note-sequence-display')) return; // Added effects-panel
+        if (event.target.closest('#side-panel') || event.target.closest('#effects-panel') || event.target.closest('#note-sequence-display')) return;
         initializeAudio(); if (event.button === 0) isMouseButton1Down = true;
     });
     window.addEventListener('mouseup', (event) => { if (event.button === 0) isMouseButton1Down = false; });
+    
     window.addEventListener('keydown', (event) => {
         if (event.target.tagName === 'TEXTAREA' || event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT') return;
         if (event.key === "Escape") { event.preventDefault(); panicStopAllSoundsAndReset(); return; }
         if (event.repeat || isPlayingBack) return;
         initializeAudio();
+        
         if (event.code === "Space") {
             event.preventDefault();
             if (!sustainPedal) {
@@ -547,12 +567,30 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (event.code === "ArrowUp") { octaveShift++; octaveShiftDisplay.textContent = octaveShift; return; }
         if (event.code === "ArrowDown") { octaveShift--; octaveShiftDisplay.textContent = octaveShift; return; }
+
         const key = event.key.toLowerCase();
-        if (!physicallyDownKeys.has(key)) { physicallyDownKeys.add(key); if (baseKeyToFrequency[key]) playNote(key); }
+        if (baseKeyToFrequency[key]) {
+             if (isTurboOn) {
+                if (turboKeyDown === null) {
+                    turboKeyDown = key;
+                    nextNoteTime = audioContext.currentTime;
+                    scheduleBeatCounter = 0;
+                    scheduler();
+                }
+            } else {
+                if (!physicallyDownKeys.has(key)) {
+                    physicallyDownKeys.add(key);
+                    playNote(key);
+                }
+            }
+        }
     });
+    
     window.addEventListener('keyup', (event) => {
         if (event.target.tagName === 'TEXTAREA' || event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT') return;
+        
         const key = event.key.toLowerCase();
+        
         if (event.code === "Space") {
             event.preventDefault(); sustainPedal = false; noteDisplay.textContent = "Sustain OFF";
             const notesToPotentiallyStop = new Set(sustainedNotes); sustainedNotes.clear();
@@ -575,7 +613,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }, releaseTime * 1000 + 100);
             return;
         }
-        physicallyDownKeys.delete(key); if (baseKeyToFrequency[key]) stopNote(key);
+        
+        if (isTurboOn && turboKeyDown === key) {
+            turboKeyDown = null;
+        }
+
+        if (!isTurboOn) {
+            physicallyDownKeys.delete(key);
+            if (baseKeyToFrequency[key]) stopNote(key);
+        }
     });
 
     volumeSlider.addEventListener('input', () => {
@@ -584,12 +630,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     volumeSlider.addEventListener('change', () => {
         const newVolume = parseFloat(volumeSlider.value);
-        // Update all notes in the sequence with the new volume
         if (recordedSequence.length > 0) {
             recordedSequence.forEach(note => {
                 note.volume = newVolume;
             });
-            // Refresh the display to show the new values
             updateSequenceDisplay(-1);
             noteDisplay.textContent = "Sequence Volume Updated";
             setTimeout(() => { if (noteDisplay.textContent === "Sequence Volume Updated") noteDisplay.textContent = ' '; }, 2000);
@@ -687,27 +731,81 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('kbd').forEach(kbd => {
         const keyVal = kbd.textContent.toLowerCase();
         if (!baseKeyToFrequency[keyVal]) return;
-        const play = (e) => { e.preventDefault(); if (!isPlayingBack) playNote(keyVal); };
-        const stop = (e) => { e.preventDefault(); if (!isPlayingBack) stopNote(keyVal); };
-        kbd.addEventListener('mousedown', play); kbd.addEventListener('mouseup', stop);
-        kbd.addEventListener('mouseleave', (e) => { if (isMouseButton1Down && !isPlayingBack && kbd.classList.contains('active')) stopNote(keyVal); });
-        kbd.addEventListener('mouseover', (e) => { if (isMouseButton1Down && !isPlayingBack) playNote(keyVal); });
+        
+        const play = (e) => {
+            e.preventDefault();
+            if (isPlayingBack) return;
+            if (isTurboOn) {
+                if (turboKeyDown === null) {
+                    turboKeyDown = keyVal;
+                    nextNoteTime = audioContext.currentTime;
+                    scheduleBeatCounter = 0;
+                    scheduler();
+                }
+            } else {
+                playNote(keyVal);
+            }
+        };
+
+        const stop = (e) => {
+            e.preventDefault();
+            if (isTurboOn && turboKeyDown === keyVal) {
+                turboKeyDown = null;
+            } else if (!isTurboOn && !isPlayingBack) {
+                stopNote(keyVal);
+            }
+        };
+
+        kbd.addEventListener('mousedown', play);
+        kbd.addEventListener('mouseup', stop);
+        kbd.addEventListener('mouseleave', (e) => {
+            if (isMouseButton1Down && !isPlayingBack && kbd.classList.contains('active')) {
+                if (isTurboOn && turboKeyDown === keyVal) {
+                    turboKeyDown = null;
+                } else if (!isTurboOn) {
+                    stopNote(keyVal);
+                }
+            }
+        });
+        kbd.addEventListener('mouseover', (e) => {
+             if (isMouseButton1Down && !isPlayingBack && !isTurboOn) {
+                 playNote(keyVal);
+             }
+        });
+        
         kbd.addEventListener('touchstart', (e) => {
             e.preventDefault(); if (isPlayingBack) return; initializeAudio();
-            playNote(keyVal); currentTouchedKeyForDrag = keyVal;
+            currentTouchedKeyForDrag = keyVal;
+            if (isTurboOn) {
+                if (turboKeyDown === null) {
+                    turboKeyDown = keyVal;
+                    nextNoteTime = audioContext.currentTime;
+                    scheduleBeatCounter = 0;
+                    scheduler();
+                }
+            } else {
+                playNote(keyVal);
+            }
         }, { passive: false });
+        
         kbd.addEventListener('touchend', (e) => {
             e.preventDefault(); if (isPlayingBack) return;
-            let touchLiftedFromThisKey = true;
-            if(touchLiftedFromThisKey || e.touches.length === 0) stopNote(keyVal);
+            
+            if (isTurboOn && turboKeyDown === keyVal) {
+                turboKeyDown = null;
+            } else if (!isTurboOn) {
+                let touchLiftedFromThisKey = true;
+                if(touchLiftedFromThisKey || e.touches.length === 0) stopNote(keyVal);
+            }
 
             if (currentTouchedKeyForDrag === keyVal && !Array.from(e.touches).some(t => document.elementFromPoint(t.clientX, t.clientY) === kbd)) {
                 currentTouchedKeyForDrag = null;
             }
         });
     });
+    
     document.addEventListener('touchmove', (event) => {
-        if (isPlayingBack || !currentTouchedKeyForDrag) return;
+        if (isPlayingBack || !currentTouchedKeyForDrag || isTurboOn) return; // Disable drag-play in turbo mode
         if (event.touches.length > 0) {
             const touch = event.touches[0];
             const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
@@ -724,20 +822,104 @@ document.addEventListener('DOMContentLoaded', () => {
             if (newKeyOver) event.preventDefault();
         }
     }, { passive: false });
+    
     document.addEventListener('touchend', (event) => {
-        if (currentTouchedKeyForDrag && event.touches.length === 0 && !isPlayingBack) {
+        if (currentTouchedKeyForDrag && event.touches.length === 0 && !isPlayingBack && !isTurboOn) {
            stopNote(currentTouchedKeyForDrag); currentTouchedKeyForDrag = null;
         }
     });
+    
     document.addEventListener('touchcancel', (event) => {
+        if (isTurboOn) turboKeyDown = null;
         if (currentTouchedKeyForDrag && !isPlayingBack) {
             stopNote(currentTouchedKeyForDrag, true); currentTouchedKeyForDrag = null;
         }
         physicallyDownKeys.forEach(physKey => stopNote(physKey, true)); physicallyDownKeys.clear();
     });
 
-    // Old togglePanelBtn listener removed, handled by new panel system.
+    // --- Metronome and Turbo Logic ---
 
+    function playMetronomeTick() {
+        if (!audioContext) return;
+        const now = audioContext.currentTime;
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1000, now);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        gain.gain.setValueAtTime(0.3 * globalVolume, now); // Use synth's globalVolume
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        osc.start(now);
+        osc.stop(now + 0.05);
+    }
+
+    function scheduler() {
+        if (!audioContext) return;
+        while (nextNoteTime < audioContext.currentTime + 0.1) {
+            const noteDivisionValue = isTurboOn ? turboDivision : 4;
+            if (isMetronomeOn) {
+                const ticksPerQuarterNote = noteDivisionValue / 4;
+                if (scheduleBeatCounter % ticksPerQuarterNote === 0) {
+                    playMetronomeTick();
+                }
+            }
+            // Play staccato note for turbo mode
+            if (isTurboOn && turboKeyDown) {
+                // playNote returns an array of sound objects for each unison voice
+                const soundObjects = playNote(turboKeyDown, false, null, true); // fromTurbo = true
+                if (soundObjects) {
+                    // Use a short, fixed timeout to stop the note, creating a staccato effect
+                    setTimeout(() => {
+                        // forceStop = true to bypass sustain, provide specific sound objects to stop
+                        stopNote(turboKeyDown, true, false, soundObjects);
+                    }, 80);
+                }
+            }
+            const secondsPerBeat = 60.0 / bpm;
+            const noteDuration = (4.0 / noteDivisionValue) * secondsPerBeat;
+            nextNoteTime += noteDuration;
+            scheduleBeatCounter++;
+        }
+    }
+
+    function startScheduler() {
+        if (schedulerIntervalId) clearInterval(schedulerIntervalId);
+        if (audioContext && (isMetronomeOn || isTurboOn)) {
+            nextNoteTime = audioContext.currentTime;
+            schedulerIntervalId = setInterval(scheduler, 25);
+        }
+    }
+
+    function stopScheduler() {
+        if (schedulerIntervalId) clearInterval(schedulerIntervalId);
+        schedulerIntervalId = null;
+    }
+    
+    metronomeToggle.addEventListener('change', () => {
+        isMetronomeOn = metronomeToggle.checked;
+        if (isMetronomeOn || isTurboOn) initializeAudio().then(startScheduler);
+        else stopScheduler();
+    });
+
+    turboToggle.addEventListener('change', () => {
+        isTurboOn = turboToggle.checked;
+        if (!isTurboOn) turboKeyDown = null;
+        if (isMetronomeOn || isTurboOn) initializeAudio().then(startScheduler);
+        else stopScheduler();
+    });
+
+    bpmSlider.addEventListener('input', () => {
+        bpm = parseInt(bpmSlider.value, 10);
+        bpmDisplay.textContent = bpm;
+    });
+
+    turboDivisionSelect.addEventListener('change', () => {
+        turboDivision = parseInt(turboDivisionSelect.value, 10);
+    });
+
+
+    // --- Sequencer Logic (mostly unchanged) ---
     function processLoadedSequenceData(incomingSanitizedNotes) {
         recordedSequence = incomingSanitizedNotes.map(note => ({ ...note }));
         let waveformForCurrentSetting;
@@ -886,7 +1068,6 @@ document.addEventListener('DOMContentLoaded', () => {
             updateSequencerControls(); playBtn.blur(); return;
         }
         initializeAudio().then(() => {
-            // Setup for the whole looping session
             isPlayingBack = true;
             updateSequencerControls();
             noteDisplay.textContent = "PLAY ▶️";
@@ -894,8 +1075,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (document.activeElement !== sequenceDisplay && sidePanel && sidePanel.classList.contains('visible')) {
                  sequenceDisplay.focus({ preventScroll: true });
             }
-
-            playSequence(); // Kick off the first loop
+            playSequence();
             playBtn.blur();
         })
         .catch(err => { console.error("Audio init failed for play:", err); playBtn.blur(); });
@@ -904,9 +1084,8 @@ document.addEventListener('DOMContentLoaded', () => {
     stopPlaybackBtn.addEventListener('click', () => { stopSequencePlayback(true); stopPlaybackBtn.blur(); });
 
     function playSequence() {
-        if (!isPlayingBack) return; // Escape hatch for the loop
+        if (!isPlayingBack) return;
 
-        // This part runs for every loop:
         playbackTimeouts.forEach(t => clearTimeout(t.id));
         playbackTimeouts = [];
         activePlaybackNoteSounds.clear();
@@ -944,10 +1123,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const lastNoteRelTime = lastNote.releaseTime !== undefined ? lastNote.releaseTime : releaseTime;
         const sequenceDuration = lastNote.startTime + lastNote.duration + lastNoteRelTime + 0.1;
 
-        // Schedule the next loop
         const loopTimeoutId = setTimeout(() => {
             if (isPlayingBack) {
-                playSequence(); // Call self to loop
+                playSequence();
             }
         }, sequenceDuration * 1000);
         playbackTimeouts.push({ type: 'loop', id: loopTimeoutId });
@@ -990,6 +1168,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isRecording) {
             isRecording = false; recordBtn.classList.remove('recording');
             recordBtn.textContent = '⏺️ Record'; activeRecordingNotes = {};
+        }
+        if (isTurboOn) {
+            turboKeyDown = null;
         }
         if (audioContext) {
             for (const poolKey in oscillatorPools) {
@@ -1157,7 +1338,7 @@ document.addEventListener('DOMContentLoaded', () => {
             noteDisplay.textContent = "Processing paste...";
             try {
                 let jsonContentToParse = text.trim();
-                if (jsonContentToParse.includes('//')) { // This will strip our header and other comments
+                if (jsonContentToParse.includes('//')) {
                     jsonContentToParse = jsonContentToParse.replace(/\\"|"(?:\\"|[^"])*"|(\/\/.*$)/gm, (match, group1) => group1 ? '' : match);
                 }
                 const importedJson = JSON.parse(jsonContentToParse);
@@ -1166,12 +1347,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     processLoadedSequenceData(sanitizedNotes);
                     noteDisplay.textContent = "Sequence Pasted"; setTimeout(() => { if (noteDisplay.textContent === "Sequence Pasted") noteDisplay.textContent = ' '; }, 2000);
                 } else {
-                    sequenceDisplay.value = text; // Put original text (with header if present) back if not valid sequence
+                    sequenceDisplay.value = text;
                     noteDisplay.textContent = "Pasted JSON not valid sequence.";
                     setTimeout(() => { if (noteDisplay.textContent.startsWith("Pasted JSON not valid")) noteDisplay.textContent = ' '; }, 3000);
                 }
             } catch (jsonError) {
-                sequenceDisplay.value = text; // Put original text back if not JSON
+                sequenceDisplay.value = text;
                 noteDisplay.textContent = "Pasted text not valid JSON.";
                 setTimeout(() => { if (noteDisplay.textContent.startsWith("Pasted text not valid")) noteDisplay.textContent = ' '; }, 3000);
             }
@@ -1185,12 +1366,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     function initialSetup() {
-        // Default panel state
-        const defaultPanel = panelsConfig.find(p => p.name === 'Seq'); // Open Sequencer by default
+        const defaultPanel = panelsConfig.find(p => p.name === 'Seq');
         if (defaultPanel) {
             openPanel(defaultPanel.panel);
         } else {
-            closeAllPanels(); // Fallback if Seq panel somehow not found
+            closeAllPanels();
         }
 
         currentWaveform = waveformSelect.value;
@@ -1215,7 +1395,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!(window.AudioContext || window.webkitAudioContext)) {
             updateAudioStatus("Web Audio API not supported.", "error");
             document.querySelectorAll('button, input, select').forEach(el => {
-                // Keep panel toggle and dark mode buttons enabled
                 if(el.id !== 'dark-mode-toggle' && el.id !== 'toggle-panel-btn' && el.id !== 'toggle-effects-panel-btn') {
                     el.disabled = true;
                 }

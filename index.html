@@ -8,7 +8,7 @@
 </head>
 <body>
     <button id="toggle-panel-btn">🎹 Seq</button>
-    <button id="toggle-effects-panel-btn">🎛️ FX</button> {/* Added Effects Panel Toggle */}
+    <button id="toggle-effects-panel-btn">🎛️ FX</button>
     <button id="dark-mode-toggle">☀️ Light Mode</button>
 
     <h1>🎹 Super Deluxe Synth</h1>
@@ -50,6 +50,28 @@
     <div>Octave Shift: <span id="octave-shift-display">0</span></div>
     <div class="instructions">Use ↑ and ↓ arrow keys to shift octaves. Space for sustain.</div>
 
+    <!-- ADDED: Metronome and Turbo Controls -->
+    <div class="timing-controls-container">
+        <div class="timing-group">
+            <input type="checkbox" id="metronome-toggle">
+            <label for="metronome-toggle">Metronome</label>
+            <label for="bpm-slider" class="bpm-label">BPM: <span id="bpm-display">120</span></label>
+            <input type="range" id="bpm-slider" min="60" max="240" step="1" value="120">
+        </div>
+        <div class="timing-group">
+            <input type="checkbox" id="turbo-toggle">
+            <label for="turbo-toggle">Turbo</label>
+             <select id="turbo-division">
+                <option value="4">1/4</option>
+                <option value="8">1/8</option>
+                <option value="16" selected>1/16</option>
+                <option value="32">1/32</option>
+            </select>
+        </div>
+    </div>
+    <!-- END ADDED SECTION -->
+
+
     <div id="note-display"> </div>
 
     <div id="keyboard">
@@ -83,7 +105,6 @@
         <button id="clear-sequence-btn">🗑️ Clear Sequence</button>
     </div>
 
-    {/* New Effects Panel */}
     <div id="effects-panel">
         <h2>Effects</h2>
         <div class="effect-group">
