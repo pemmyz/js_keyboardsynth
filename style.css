@@ -92,7 +92,7 @@ body.light-mode .instructions { color: #555; }
 }
 
 
-/* --- ADDED: TIMING CONTROLS SECTION --- */
+/* --- TIMING CONTROLS SECTION --- */
 .timing-controls-container {
     display: flex;
     justify-content: center;
@@ -130,6 +130,12 @@ body.light-mode .instructions { color: #555; }
     width: 150px;
 }
 
+/* ADDED: Style for the new metronome volume slider */
+.timing-group input[type="range"]#metronome-volume-slider {
+    width: 80px;
+}
+
+
 .timing-group select {
     background-color: #333;
     color: #fff;
@@ -147,7 +153,7 @@ body.light-mode .timing-group select {
     color: #000;
     border-color: #aaa;
 }
-/* --- END ADDED SECTION --- */
+/* --- END TIMING CONTROLS SECTION --- */
 
 
 /* --- Top Right Buttons --- */

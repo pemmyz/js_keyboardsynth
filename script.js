@@ -54,16 +54,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let unisonVoices = 1;
     let detuneAmount = 0;
 
-    // --- Metronome and Turbo State ---
+    // --- Metronome State ---
     let isMetronomeOn = false;
-    let isTurboOn = false;
     let bpm = 120;
-    let turboDivision = 16;
+    let metronomeVolume = 0.7; // Higher default volume
     let schedulerIntervalId = null;
     let nextNoteTime = 0.0;
-    let scheduleBeatCounter = 0;
-    let turboKeyDown = null;
-
 
     const DEFAULT_WAVEFORM_ON_PARSE = 'square';
     const JSON_EXPORT_COMMENT_HEADER = `// This is Super Deluxe Synth sequencer file,
@@ -113,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // UI Elements for Sequencer Panel
     const sidePanel = document.getElementById('side-panel');
-    const togglePanelBtn = document.getElementById('toggle-panel-btn'); // Sequencer panel toggle
+    const togglePanelBtn = document.getElementById('toggle-panel-btn');
     const recordBtn = document.getElementById('record-btn');
     const playBtn = document.getElementById('play-btn');
     const stopPlaybackBtn = document.getElementById('stop-playback-btn');
@@ -130,12 +126,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const effectsPanel = document.getElementById('effects-panel');
     const toggleEffectsPanelBtn = document.getElementById('toggle-effects-panel-btn');
 
-    // Metronome and Turbo UI Elements
+    // Metronome UI Elements
     const metronomeToggle = document.getElementById('metronome-toggle');
     const bpmSlider = document.getElementById('bpm-slider');
     const bpmDisplay = document.getElementById('bpm-display');
-    const turboToggle = document.getElementById('turbo-toggle');
-    const turboDivisionSelect = document.getElementById('turbo-division');
+    const metronomeVolumeSlider = document.getElementById('metronome-volume-slider');
 
     const FM_MODULATOR_RATIO = 1.4;
     const FM_MODULATION_INDEX_SCALE = 2.0;
@@ -150,14 +145,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Panel Management ---
     const panelsConfig = [
         {
-            button: togglePanelBtn, // Sequencer
+            button: togglePanelBtn,
             panel: sidePanel,
             name: 'Seq',
             iconOpen: '➡️ Close',
             iconClosed: '🎹 Seq'
         },
         {
-            button: toggleEffectsPanelBtn, // Effects
+            button: toggleEffectsPanelBtn,
             panel: effectsPanel,
             name: 'FX',
             iconOpen: '➡️ Close FX',
@@ -330,10 +325,10 @@ document.addEventListener('DOMContentLoaded', () => {
         sound.busy = false; sound.isPlayback = false; sound._currentWaveformType = null;
     }
 
-    function playNote(key, forPlayback = false, playbackNoteData = null, fromTurbo = false) {
+    function playNote(key, forPlayback = false, playbackNoteData = null) {
         if (!audioContext || audioContext.state !== 'running') {
             initializeAudio().then(() => {
-                if (audioContext.state === 'running') playNote(key, forPlayback, playbackNoteData, fromTurbo);
+                if (audioContext.state === 'running') playNote(key, forPlayback, playbackNoteData);
             }).catch(err => {});
             return null;
         }
@@ -450,7 +445,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (soundObjectsStarted.length === 0) return null;
         if (kbdElements[key]) kbdElements[key].classList.add('active');
         
-        if (!forPlayback && !fromTurbo) {
+        if (!forPlayback) {
             noteDisplay.textContent = getNoteNameWithOctave(key, noteDataOctaveShiftValue);
         }
         if (!forPlayback && isRecording && !activeRecordingNotes[key]) {
@@ -569,20 +564,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.code === "ArrowDown") { octaveShift--; octaveShiftDisplay.textContent = octaveShift; return; }
 
         const key = event.key.toLowerCase();
-        if (baseKeyToFrequency[key]) {
-             if (isTurboOn) {
-                if (turboKeyDown === null) {
-                    turboKeyDown = key;
-                    nextNoteTime = audioContext.currentTime;
-                    scheduleBeatCounter = 0;
-                    scheduler();
-                }
-            } else {
-                if (!physicallyDownKeys.has(key)) {
-                    physicallyDownKeys.add(key);
-                    playNote(key);
-                }
-            }
+        if (!physicallyDownKeys.has(key)) {
+            physicallyDownKeys.add(key);
+            if (baseKeyToFrequency[key]) playNote(key);
         }
     });
     
@@ -614,14 +598,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        if (isTurboOn && turboKeyDown === key) {
-            turboKeyDown = null;
-        }
-
-        if (!isTurboOn) {
-            physicallyDownKeys.delete(key);
-            if (baseKeyToFrequency[key]) stopNote(key);
-        }
+        physicallyDownKeys.delete(key);
+        if (baseKeyToFrequency[key]) stopNote(key);
     });
 
     volumeSlider.addEventListener('input', () => {
@@ -734,69 +712,37 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const play = (e) => {
             e.preventDefault();
-            if (isPlayingBack) return;
-            if (isTurboOn) {
-                if (turboKeyDown === null) {
-                    turboKeyDown = keyVal;
-                    nextNoteTime = audioContext.currentTime;
-                    scheduleBeatCounter = 0;
-                    scheduler();
-                }
-            } else {
-                playNote(keyVal);
-            }
+            if (!isPlayingBack) playNote(keyVal);
         };
 
         const stop = (e) => {
             e.preventDefault();
-            if (isTurboOn && turboKeyDown === keyVal) {
-                turboKeyDown = null;
-            } else if (!isTurboOn && !isPlayingBack) {
-                stopNote(keyVal);
-            }
+            if (!isPlayingBack) stopNote(keyVal);
         };
 
         kbd.addEventListener('mousedown', play);
         kbd.addEventListener('mouseup', stop);
         kbd.addEventListener('mouseleave', (e) => {
             if (isMouseButton1Down && !isPlayingBack && kbd.classList.contains('active')) {
-                if (isTurboOn && turboKeyDown === keyVal) {
-                    turboKeyDown = null;
-                } else if (!isTurboOn) {
-                    stopNote(keyVal);
-                }
+                stopNote(keyVal);
             }
         });
         kbd.addEventListener('mouseover', (e) => {
-             if (isMouseButton1Down && !isPlayingBack && !isTurboOn) {
+             if (isMouseButton1Down && !isPlayingBack) {
                  playNote(keyVal);
              }
         });
         
         kbd.addEventListener('touchstart', (e) => {
             e.preventDefault(); if (isPlayingBack) return; initializeAudio();
+            playNote(keyVal);
             currentTouchedKeyForDrag = keyVal;
-            if (isTurboOn) {
-                if (turboKeyDown === null) {
-                    turboKeyDown = keyVal;
-                    nextNoteTime = audioContext.currentTime;
-                    scheduleBeatCounter = 0;
-                    scheduler();
-                }
-            } else {
-                playNote(keyVal);
-            }
         }, { passive: false });
         
         kbd.addEventListener('touchend', (e) => {
             e.preventDefault(); if (isPlayingBack) return;
-            
-            if (isTurboOn && turboKeyDown === keyVal) {
-                turboKeyDown = null;
-            } else if (!isTurboOn) {
-                let touchLiftedFromThisKey = true;
-                if(touchLiftedFromThisKey || e.touches.length === 0) stopNote(keyVal);
-            }
+            let touchLiftedFromThisKey = true;
+            if (touchLiftedFromThisKey || e.touches.length === 0) stopNote(keyVal);
 
             if (currentTouchedKeyForDrag === keyVal && !Array.from(e.touches).some(t => document.elementFromPoint(t.clientX, t.clientY) === kbd)) {
                 currentTouchedKeyForDrag = null;
@@ -805,7 +751,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     document.addEventListener('touchmove', (event) => {
-        if (isPlayingBack || !currentTouchedKeyForDrag || isTurboOn) return; // Disable drag-play in turbo mode
+        if (isPlayingBack || !currentTouchedKeyForDrag) return;
         if (event.touches.length > 0) {
             const touch = event.touches[0];
             const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
@@ -824,20 +770,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { passive: false });
     
     document.addEventListener('touchend', (event) => {
-        if (currentTouchedKeyForDrag && event.touches.length === 0 && !isPlayingBack && !isTurboOn) {
+        if (currentTouchedKeyForDrag && event.touches.length === 0 && !isPlayingBack) {
            stopNote(currentTouchedKeyForDrag); currentTouchedKeyForDrag = null;
         }
     });
     
     document.addEventListener('touchcancel', (event) => {
-        if (isTurboOn) turboKeyDown = null;
         if (currentTouchedKeyForDrag && !isPlayingBack) {
             stopNote(currentTouchedKeyForDrag, true); currentTouchedKeyForDrag = null;
         }
         physicallyDownKeys.forEach(physKey => stopNote(physKey, true)); physicallyDownKeys.clear();
     });
 
-    // --- Metronome and Turbo Logic ---
+    // --- Metronome Logic ---
 
     function playMetronomeTick() {
         if (!audioContext) return;
@@ -848,7 +793,8 @@ document.addEventListener('DOMContentLoaded', () => {
         osc.frequency.setValueAtTime(1000, now);
         osc.connect(gain);
         gain.connect(audioContext.destination);
-        gain.gain.setValueAtTime(0.3 * globalVolume, now); // Use synth's globalVolume
+        // Use the dedicated metronome volume, also affected by the main volume
+        gain.gain.setValueAtTime(metronomeVolume * globalVolume, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
         osc.start(now);
         osc.stop(now + 0.05);
@@ -857,35 +803,18 @@ document.addEventListener('DOMContentLoaded', () => {
     function scheduler() {
         if (!audioContext) return;
         while (nextNoteTime < audioContext.currentTime + 0.1) {
-            const noteDivisionValue = isTurboOn ? turboDivision : 4;
             if (isMetronomeOn) {
-                const ticksPerQuarterNote = noteDivisionValue / 4;
-                if (scheduleBeatCounter % ticksPerQuarterNote === 0) {
-                    playMetronomeTick();
-                }
+                playMetronomeTick();
             }
-            // Play staccato note for turbo mode
-            if (isTurboOn && turboKeyDown) {
-                // playNote returns an array of sound objects for each unison voice
-                const soundObjects = playNote(turboKeyDown, false, null, true); // fromTurbo = true
-                if (soundObjects) {
-                    // Use a short, fixed timeout to stop the note, creating a staccato effect
-                    setTimeout(() => {
-                        // forceStop = true to bypass sustain, provide specific sound objects to stop
-                        stopNote(turboKeyDown, true, false, soundObjects);
-                    }, 80);
-                }
-            }
+            // Each tick is a quarter note
             const secondsPerBeat = 60.0 / bpm;
-            const noteDuration = (4.0 / noteDivisionValue) * secondsPerBeat;
-            nextNoteTime += noteDuration;
-            scheduleBeatCounter++;
+            nextNoteTime += secondsPerBeat;
         }
     }
 
     function startScheduler() {
         if (schedulerIntervalId) clearInterval(schedulerIntervalId);
-        if (audioContext && (isMetronomeOn || isTurboOn)) {
+        if (audioContext && isMetronomeOn) {
             nextNoteTime = audioContext.currentTime;
             schedulerIntervalId = setInterval(scheduler, 25);
         }
@@ -898,14 +827,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     metronomeToggle.addEventListener('change', () => {
         isMetronomeOn = metronomeToggle.checked;
-        if (isMetronomeOn || isTurboOn) initializeAudio().then(startScheduler);
-        else stopScheduler();
-    });
-
-    turboToggle.addEventListener('change', () => {
-        isTurboOn = turboToggle.checked;
-        if (!isTurboOn) turboKeyDown = null;
-        if (isMetronomeOn || isTurboOn) initializeAudio().then(startScheduler);
+        if (isMetronomeOn) initializeAudio().then(startScheduler);
         else stopScheduler();
     });
 
@@ -914,12 +836,11 @@ document.addEventListener('DOMContentLoaded', () => {
         bpmDisplay.textContent = bpm;
     });
 
-    turboDivisionSelect.addEventListener('change', () => {
-        turboDivision = parseInt(turboDivisionSelect.value, 10);
+    metronomeVolumeSlider.addEventListener('input', () => {
+        metronomeVolume = parseFloat(metronomeVolumeSlider.value);
     });
 
-
-    // --- Sequencer Logic (mostly unchanged) ---
+    // --- Sequencer Logic ---
     function processLoadedSequenceData(incomingSanitizedNotes) {
         recordedSequence = incomingSanitizedNotes.map(note => ({ ...note }));
         let waveformForCurrentSetting;
@@ -1169,9 +1090,6 @@ document.addEventListener('DOMContentLoaded', () => {
             isRecording = false; recordBtn.classList.remove('recording');
             recordBtn.textContent = '⏺️ Record'; activeRecordingNotes = {};
         }
-        if (isTurboOn) {
-            turboKeyDown = null;
-        }
         if (audioContext) {
             for (const poolKey in oscillatorPools) {
                 if (oscillatorPools.hasOwnProperty(poolKey)) {
@@ -1384,6 +1302,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         volumeSlider.value = String(globalVolume);
         octaveShiftDisplay.textContent = octaveShift;
+        
+        if (metronomeVolumeSlider) metronomeVolumeSlider.value = String(metronomeVolume);
 
         if (unisonVoicesSlider) unisonVoicesSlider.value = String(unisonVoices);
         if (unisonVoicesDisplay) unisonVoicesDisplay.textContent = unisonVoices;

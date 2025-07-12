@@ -50,26 +50,18 @@
     <div>Octave Shift: <span id="octave-shift-display">0</span></div>
     <div class="instructions">Use ↑ and ↓ arrow keys to shift octaves. Space for sustain.</div>
 
-    <!-- ADDED: Metronome and Turbo Controls -->
+    <!-- Metronome Controls (Volume Slider Added) -->
     <div class="timing-controls-container">
         <div class="timing-group">
             <input type="checkbox" id="metronome-toggle">
             <label for="metronome-toggle">Metronome</label>
+            <label for="metronome-volume-slider">Vol:</label>
+            <input type="range" id="metronome-volume-slider" min="0" max="1" step="0.01" value="0.7">
             <label for="bpm-slider" class="bpm-label">BPM: <span id="bpm-display">120</span></label>
             <input type="range" id="bpm-slider" min="60" max="240" step="1" value="120">
         </div>
-        <div class="timing-group">
-            <input type="checkbox" id="turbo-toggle">
-            <label for="turbo-toggle">Turbo</label>
-             <select id="turbo-division">
-                <option value="4">1/4</option>
-                <option value="8">1/8</option>
-                <option value="16" selected>1/16</option>
-                <option value="32">1/32</option>
-            </select>
-        </div>
     </div>
-    <!-- END ADDED SECTION -->
+    <!-- END MODIFIED SECTION -->
 
 
     <div id="note-display"> </div>
