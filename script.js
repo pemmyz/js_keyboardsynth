@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Audio Setup & State ---
     let audioContext;
+    let audioInitializationPromise = null; // FIX: For robust, race-free initialization
     const fadeoutTime = 0.2;
     const attackTime = 0.01;
     const releaseTime = fadeoutTime;
@@ -61,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let distortionNode;
     let modLfo, modLfoGain, modDelay, modFeedbackGain, modMixNode, modDryGain;
     let stereoSpreadAmount = 0;
-    let isFxBypassed = false;
+    let isFxBypassed = true; // FIX: Set FX to be OFF by default
     let fxBypassToggleBtn;
 
     // --- Metronome State ---
@@ -411,32 +412,60 @@ document.addEventListener('DOMContentLoaded', () => {
         return notePart + newOctave;
     }
 
+    // FIX: This function is now fully robust against race conditions.
     function initializeAudio() {
-        return new Promise((resolve, reject) => {
-            if (audioContext && audioContext.state === 'running') {
-                resolve(); return;
-            }
+        if (audioContext && audioContext.state === 'running') {
+            return Promise.resolve();
+        }
+
+        // If initialization is already in progress, return the existing promise
+        if (audioInitializationPromise) {
+            return audioInitializationPromise;
+        }
+
+        // Start a new initialization process
+        audioInitializationPromise = new Promise((resolve, reject) => {
             try {
                 if (!audioContext) {
                     audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                        latencyHint: 'interactive', sampleRate: 44100
+                        latencyHint: 'interactive',
+                        sampleRate: 44100
                     });
                 }
+
+                // This must be called from a user gesture (click, keydown, etc.)
                 audioContext.resume().then(() => {
-                    if (!effectsChainInput) setupEffectsChain();
-                    if (Object.keys(oscillatorPools).length === 0) preCreateOscillatorPools();
-                    if (!pwmPeriodicWave && audioContext) {
-                        pwmPeriodicWave = audioContext.createPeriodicWave(PWM_REAL_COEFFS, PWM_IMAG_COEFFS, { disableNormalization: false });
+                    if (audioContext.state === 'running') {
+                        // Setup nodes only on the very first successful resume
+                        if (!effectsChainInput) setupEffectsChain();
+                        if (Object.keys(oscillatorPools).length === 0) preCreateOscillatorPools();
+                        if (!pwmPeriodicWave) {
+                            pwmPeriodicWave = audioContext.createPeriodicWave(PWM_REAL_COEFFS, PWM_IMAG_COEFFS, { disableNormalization: false });
+                        }
+                        updateAudioStatus();
+                        resolve();
+                    } else {
+                        reject(new Error("Audio context did not resume to 'running' state."));
                     }
-                    updateAudioStatus(); resolve();
-                }).catch(e => {
-                    updateAudioStatus("Error resuming audio.", "error"); console.error("Audio resume failed:", e); reject(e);
+                }).catch(err => {
+                    updateAudioStatus("Error resuming audio.", "error");
+                    console.error("Audio resume failed:", err);
+                    reject(err);
                 });
-            } catch (e) {
-                updateAudioStatus("Web Audio API not supported.", "error"); console.error("AudioContext creation failed:", e); reject(e);
+
+            } catch (err) {
+                updateAudioStatus("Web Audio API not supported.", "error");
+                console.error("AudioContext creation failed:", err);
+                reject(err);
             }
+        }).finally(() => {
+            // Clear the promise so that if it failed, a new attempt can be made.
+            audioInitializationPromise = null;
         });
+
+        return audioInitializationPromise;
     }
+
 
     function updateAudioStatus(message = '', type = '') {
         if (!statusDiv) return;
@@ -532,7 +561,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!audioContext || audioContext.state !== 'running') {
             initializeAudio().then(() => {
                 if (audioContext.state === 'running') playNote(key, forPlayback, playbackNoteData);
-            }).catch(err => {});
+            }).catch(err => {
+                // If initialization fails, we can't play the note.
+                console.error("Cannot play note, audio context not ready.", err);
+            });
             return null;
         }
         if (!baseKeyToFrequency[key]) return null;
@@ -754,7 +786,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentTouchedKeyForDrag = null;
     window.addEventListener('mousedown', (event) => {
         if (event.target.closest('#side-panel') || event.target.closest('#effects-panel') || event.target.closest('#note-sequence-display')) return;
-        initializeAudio(); if (event.button === 0) isMouseButton1Down = true;
+        initializeAudio().catch(e => console.error("Audio init on mousedown failed", e));
+        if (event.button === 0) isMouseButton1Down = true;
     });
     window.addEventListener('mouseup', (event) => { if (event.button === 0) isMouseButton1Down = false; });
     
@@ -762,7 +795,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.target.tagName === 'TEXTAREA' || event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT') return;
         if (event.key === "Escape") { event.preventDefault(); panicStopAllSoundsAndReset(); return; }
         if (event.repeat || isPlayingBack) return;
-        initializeAudio();
+        initializeAudio().catch(e => console.error("Audio init on keydown failed", e));
         
         if (event.code === "Space") {
             event.preventDefault();
@@ -932,7 +965,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         kbd.addEventListener('touchstart', (e) => {
-            e.preventDefault(); if (isPlayingBack) return; initializeAudio();
+            e.preventDefault(); if (isPlayingBack) return;
+            initializeAudio().catch(e => console.error("Audio init on touchstart failed", e));
             playNote(keyVal);
             currentTouchedKeyForDrag = keyVal;
         }, { passive: false });
@@ -1019,7 +1053,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     metronomeToggle.addEventListener('change', () => {
         isMetronomeOn = metronomeToggle.checked;
-        if (isMetronomeOn) initializeAudio().then(startScheduler);
+        if (isMetronomeOn) initializeAudio().then(startScheduler).catch(e => console.error("Could not start metronome", e));
         else stopScheduler();
     });
 
@@ -1504,21 +1538,29 @@ document.addEventListener('DOMContentLoaded', () => {
             if (reverbMixNode && audioContext) reverbMixNode.gain.setTargetAtTime(val, audioContext.currentTime, 0.01);
             reverbMixDisplay.textContent = val.toFixed(2);
         });
+        reverbMix.addEventListener('change', () => reverbMix.blur());
+
         delayTime.addEventListener('input', () => {
             const val = parseFloat(delayTime.value);
             if (delayNode && audioContext) delayNode.delayTime.setTargetAtTime(val, audioContext.currentTime, 0.01);
             delayTimeDisplay.textContent = val.toFixed(2);
         });
+        delayTime.addEventListener('change', () => delayTime.blur());
+
         delayFeedback.addEventListener('input', () => {
             const val = parseFloat(delayFeedback.value);
             if (delayFeedbackNode && audioContext) delayFeedbackNode.gain.setTargetAtTime(val, audioContext.currentTime, 0.01);
             delayFeedbackDisplay.textContent = val.toFixed(2);
         });
+        delayFeedback.addEventListener('change', () => delayFeedback.blur());
+
         delayMix.addEventListener('input', () => {
             const val = parseFloat(delayMix.value);
             if (delayMixNode && audioContext) delayMixNode.gain.setTargetAtTime(val, audioContext.currentTime, 0.01);
             delayMixDisplay.textContent = val.toFixed(2);
         });
+        delayMix.addEventListener('change', () => delayMix.blur());
+
         const updateDistortion = () => {
             if (!distortionNode || !audioContext) return;
             const amount = parseFloat(distortionAmount.value);
@@ -1526,7 +1568,11 @@ document.addEventListener('DOMContentLoaded', () => {
             distortionAmountDisplay.textContent = amount;
         };
         distortionAmount.addEventListener('input', updateDistortion);
-        distortionType.addEventListener('change', updateDistortion);
+        distortionAmount.addEventListener('change', () => distortionAmount.blur());
+        distortionType.addEventListener('change', () => {
+            updateDistortion();
+            distortionType.blur();
+        });
 
         const updateModEffect = () => {
             if (!modLfo || !modLfoGain || !modDelay || !modFeedbackGain || !audioContext) return;
@@ -1545,13 +1591,19 @@ document.addEventListener('DOMContentLoaded', () => {
             modEffectDepthDisplay.textContent = depth.toFixed(2);
         };
         modEffectRate.addEventListener('input', updateModEffect);
+        modEffectRate.addEventListener('change', () => modEffectRate.blur());
         modEffectDepth.addEventListener('input', updateModEffect);
-        modEffectType.addEventListener('change', updateModEffect);
+        modEffectDepth.addEventListener('change', () => modEffectDepth.blur());
+        modEffectType.addEventListener('change', () => {
+            updateModEffect();
+            modEffectType.blur();
+        });
 
         stereoSpreadAmountSlider.addEventListener('input', () => {
             stereoSpreadAmount = parseFloat(stereoSpreadAmountSlider.value);
             stereoSpreadAmountDisplay.textContent = stereoSpreadAmount.toFixed(2);
         });
+        stereoSpreadAmountSlider.addEventListener('change', () => stereoSpreadAmountSlider.blur());
     }
 
     function initialSetup() {
@@ -1578,7 +1630,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if(effectsPanelHeading) {
             fxBypassToggleBtn = document.createElement('button');
             fxBypassToggleBtn.id = 'fx-bypass-toggle';
-            fxBypassToggleBtn.textContent = '🔊 FX On';
+            // The text content will be set by updateFxBypassState
             fxBypassToggleBtn.style.cssText = `
                 display: block; width: 100%; margin: 15px 0; padding: 10px 12px; font-size: 0.95em;
                 background-color: #007bff; border-color: #0056b3; color: white; border: 1px solid;
@@ -1596,7 +1648,9 @@ document.addEventListener('DOMContentLoaded', () => {
         effectsPanel.querySelectorAll('p').forEach(p => p.style.display = 'none');
         bindEffectsControls();
 
-        updateAudioStatus("Initializing..."); updateSequenceDisplay(-1); updateSequencerControls();
+        updateAudioStatus("Initializing..."); 
+        updateSequenceDisplay(-1); 
+        updateSequencerControls();
 
         if (!(window.AudioContext || window.webkitAudioContext)) {
             updateAudioStatus("Web Audio API not supported.", "error");
@@ -1608,22 +1662,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        let initialUnlockDone = false;
-        const initialUnlockHandler = () => {
-            if (audioContext && audioContext.state === 'suspended' && !initialUnlockDone) {
-                initializeAudio().then(() => {
-                    initialUnlockDone = true;
-                    document.body.removeEventListener('click', initialUnlockHandler, { capture: true });
-                    document.body.removeEventListener('keydown', initialUnlockHandler, { capture: true });
-                }).catch(() => { console.warn("Initial audio unlock failed, listeners remain."); });
-            } else if (initialUnlockDone || (audioContext && audioContext.state === 'running')) {
-                document.body.removeEventListener('click', initialUnlockHandler, { capture: true });
-                document.body.removeEventListener('keydown', initialUnlockHandler, { capture: true });
-            }
-        };
-        document.body.addEventListener('click', initialUnlockHandler, { capture: true, once: false });
-        document.body.addEventListener('keydown', initialUnlockHandler, { capture: true, once: false });
-        initializeAudio().catch(err => console.warn("Initial silent audio init failed:", err));
+        updateAudioStatus("Click or press a key to enable audio", "suspended");
     }
 
     initialSetup();
