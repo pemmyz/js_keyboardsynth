@@ -34,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fadeoutTime = 0.2;
     const attackTime = 0.01;
     const releaseTime = fadeoutTime;
+    const NOTE_BASE_GAIN = 0.5;
 
     const statusDiv = document.getElementById('audio-status');
     const waveformSelect = document.getElementById('waveform-select');
@@ -47,19 +48,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const unisonDetuneDisplay = document.getElementById('unison-detune-display');
 
     let currentWaveform = waveformSelect.value;
-    let globalVolume = parseFloat(volumeSlider.value);
     let octaveShift = 0;
     let programmaticWaveformChange = false;
 
     let unisonVoices = 1;
     let detuneAmount = 0;
 
+    // --- Effects State & Nodes ---
+    let effectsChainInput, masterOutputGain, fxBypassGain;
+    let reverbNode, reverbMixNode;
+    let delayNode, delayFeedbackNode, delayMixNode;
+    let distortionNode;
+    let modLfo, modLfoGain, modDelay, modFeedbackGain, modMixNode, modDryGain;
+    let stereoSpreadAmount = 0;
+    let isFxBypassed = false;
+    let fxBypassToggleBtn;
+
     // --- Metronome State ---
     let isMetronomeOn = false;
     let bpm = 120;
-    let metronomeVolume = 0.7; // Higher default volume
+    let metronomeVolume = 0.7;
     let schedulerIntervalId = null;
     let nextNoteTime = 0.0;
+    
+    // --- Core Synth State ---
+    let activeNoteSounds = new Map(); // Robust state tracking for currently playing notes
 
     const DEFAULT_WAVEFORM_ON_PARSE = 'square';
     const JSON_EXPORT_COMMENT_HEADER = `// This is Super Deluxe Synth sequencer file,
@@ -196,6 +209,183 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Effects Implementation ---
+    function updateFxBypassState() {
+        if (!audioContext || !effectsChainInput || !masterOutputGain || !fxBypassGain) return;
+
+        if (isFxBypassed) {
+            // Route signal directly to master, bypassing effects.
+            effectsChainInput.connect(masterOutputGain);
+            fxBypassGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.01);
+            if(fxBypassToggleBtn) fxBypassToggleBtn.textContent = '🔊 FX Off';
+        } else {
+            // Route signal through the effects chain.
+            effectsChainInput.disconnect(masterOutputGain);
+            fxBypassGain.gain.setTargetAtTime(1, audioContext.currentTime, 0.01);
+             if(fxBypassToggleBtn) fxBypassToggleBtn.textContent = '🔊 FX On';
+        }
+    }
+
+    function makeDistortionCurve(amount, type = 'distortion') {
+        const k = typeof amount === 'number' ? amount : 50;
+        const n_samples = 44100;
+        const curve = new Float32Array(n_samples);
+        let x;
+        for (let i = 0; i < n_samples; ++i) {
+            x = i * 2 / n_samples - 1;
+            if (k === 0) {
+                curve[i] = x;
+                continue;
+            }
+            switch (type) {
+                case 'overdrive':
+                    curve[i] = (1 + k/100) * x - (k/100) * Math.pow(x, 3);
+                    break;
+                case 'fuzz':
+                     const y = x * (k / 10 + 1.2);
+                     curve[i] = Math.max(-1, Math.min(1, y)) * (1 - (1 / (1 + Math.abs(y)*5)));
+                     break;
+                case 'bitcrush':
+                    const steps = Math.pow(2, 8 - Math.floor(k / 100 * 6));
+                    curve[i] = Math.round(x * steps) / steps;
+                    break;
+                case 'distortion':
+                default:
+                    curve[i] = (Math.PI + k) * x / (Math.PI + k * Math.abs(x));
+                    break;
+            }
+        }
+        return curve;
+    }
+
+    function generateReverbIR() {
+        return new Promise((resolve) => {
+            if (!audioContext) { resolve(null); return; }
+            const sampleRate = audioContext.sampleRate;
+            const length = sampleRate * 2;
+            const impulse = audioContext.createBuffer(2, length, sampleRate);
+            for (let channel = 0; channel < 2; channel++) {
+                const channelData = impulse.getChannelData(channel);
+                for (let i = 0; i < length; i++) {
+                    const decay = Math.pow(1 - i / length, 2.5);
+                    channelData[i] = (Math.random() * 2 - 1) * decay;
+                }
+            }
+            resolve(impulse);
+        });
+    }
+
+    function initializeEffectSettings() {
+        const reverbMix = document.getElementById('reverb-mix');
+        const delayTime = document.getElementById('delay-time');
+        const delayFeedback = document.getElementById('delay-feedback');
+        const delayMix = document.getElementById('delay-mix');
+        const distortionAmount = document.getElementById('distortion-amount');
+        const distortionType = document.getElementById('distortion-type');
+        const modEffectType = document.getElementById('mod-effect-type');
+        const modEffectRate = document.getElementById('mod-effect-rate');
+        const modEffectDepth = document.getElementById('mod-effect-depth');
+        const stereoSpreadAmountSlider = document.getElementById('stereo-spread-amount');
+
+        if (masterOutputGain) masterOutputGain.gain.value = parseFloat(volumeSlider.value);
+        if (reverbMixNode) reverbMixNode.gain.value = parseFloat(reverbMix.value);
+        if (delayNode) delayNode.delayTime.value = parseFloat(delayTime.value);
+        if (delayFeedbackNode) delayFeedbackNode.gain.value = parseFloat(delayFeedback.value);
+        if (delayMixNode) delayMixNode.gain.value = parseFloat(delayMix.value);
+        if (distortionNode) {
+            distortionNode.curve = makeDistortionCurve(parseFloat(distortionAmount.value), distortionType.value);
+            distortionNode.oversample = '4x';
+        }
+        const rate = parseFloat(modEffectRate.value);
+        const depth = parseFloat(modEffectDepth.value);
+        const type = modEffectType.value;
+        if (modLfo) modLfo.frequency.value = rate;
+        if (type === 'chorus') {
+            if (modFeedbackGain) modFeedbackGain.gain.value = 0.3;
+            if (modDelay) modDelay.delayTime.value = 0.025;
+            if (modLfoGain) modLfoGain.gain.value = depth * 0.005;
+        } else if (type === 'flanger') {
+            if (modFeedbackGain) modFeedbackGain.gain.value = 0.85;
+            if (modDelay) modDelay.delayTime.value = 0.005;
+            if (modLfoGain) modLfoGain.gain.value = depth * 0.003;
+        }
+        if(modMixNode) modMixNode.gain.value = 0.5; 
+        if(modDryGain) modDryGain.gain.value = 0.5;
+        stereoSpreadAmount = parseFloat(stereoSpreadAmountSlider.value);
+    }
+
+    function setupEffectsChain() {
+        if (!audioContext) return;
+        effectsChainInput = audioContext.createGain();
+        masterOutputGain = audioContext.createGain();
+        fxBypassGain = audioContext.createGain();
+
+        masterOutputGain.connect(audioContext.destination);
+        let currentNode = fxBypassGain; // Start chain from the bypass gate
+
+        // 1. Distortion
+        distortionNode = audioContext.createWaveShaper();
+        currentNode.connect(distortionNode);
+        currentNode = distortionNode;
+
+        // 2. Modulation (Chorus/Flanger)
+        modDryGain = audioContext.createGain();
+        currentNode.connect(modDryGain);
+        modDelay = audioContext.createDelay(1);
+        modLfo = audioContext.createOscillator();
+        modLfoGain = audioContext.createGain();
+        modFeedbackGain = audioContext.createGain();
+        modMixNode = audioContext.createGain();
+        modLfo.connect(modLfoGain);
+        modLfoGain.connect(modDelay.delayTime);
+        modLfo.start();
+        currentNode.connect(modDelay);
+        modDelay.connect(modFeedbackGain);
+        modFeedbackGain.connect(modDelay);
+        modDelay.connect(modMixNode);
+        const modOutput = audioContext.createGain();
+        modDryGain.connect(modOutput);
+        modMixNode.connect(modOutput);
+        currentNode = modOutput;
+
+        // 3. Delay
+        const delayDryGain = audioContext.createGain();
+        currentNode.connect(delayDryGain);
+        delayNode = audioContext.createDelay(2.0);
+        delayFeedbackNode = audioContext.createGain();
+        delayMixNode = audioContext.createGain();
+        currentNode.connect(delayNode);
+        delayNode.connect(delayFeedbackNode);
+        delayFeedbackNode.connect(delayNode);
+        delayNode.connect(delayMixNode);
+        const delayOutput = audioContext.createGain();
+        delayDryGain.connect(delayOutput);
+        delayMixNode.connect(delayOutput);
+        delayDryGain.gain.value = 1.0;
+        currentNode = delayOutput;
+
+        // 4. Reverb
+        const reverbDryGain = audioContext.createGain();
+        currentNode.connect(reverbDryGain);
+        reverbNode = audioContext.createConvolver();
+        reverbMixNode = audioContext.createGain();
+        generateReverbIR().then(irBuffer => { if (reverbNode) reverbNode.buffer = irBuffer; });
+        currentNode.connect(reverbNode);
+        reverbNode.connect(reverbMixNode);
+        const reverbOutput = audioContext.createGain();
+        reverbDryGain.connect(reverbOutput);
+        reverbMixNode.connect(reverbOutput);
+        reverbDryGain.gain.value = 1.0;
+        currentNode = reverbOutput;
+
+        // Final connections for bypass routing
+        effectsChainInput.connect(fxBypassGain);
+        currentNode.connect(masterOutputGain); // Connect wet signal to master
+        
+        initializeEffectSettings();
+        updateFxBypassState(); // Set initial bypass state
+    }
+
 
     function sanitizeIncomingNote(noteData) {
         return {
@@ -203,7 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
             startTime: parseFloat(noteData.startTime),
             duration: parseFloat(noteData.duration),
             waveform: noteData.waveform,
-            volume: noteData.volume !== undefined ? parseFloat(noteData.volume) : globalVolume,
+            volume: noteData.volume !== undefined ? parseFloat(noteData.volume) : NOTE_BASE_GAIN,
             octaveShift: noteData.octaveShift !== undefined ? parseInt(noteData.octaveShift) : 0,
         };
     }
@@ -233,6 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
                 audioContext.resume().then(() => {
+                    if (!effectsChainInput) setupEffectsChain();
                     if (Object.keys(oscillatorPools).length === 0) preCreateOscillatorPools();
                     if (!pwmPeriodicWave && audioContext) {
                         pwmPeriodicWave = audioContext.createPeriodicWave(PWM_REAL_COEFFS, PWM_IMAG_COEFFS, { disableNormalization: false });
@@ -265,7 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function preCreateOscillatorPools() {
-        if (!audioContext || audioContext.state !== 'running') return;
+        if (!audioContext || audioContext.state !== 'running' || !effectsChainInput) return;
         for (const key in baseKeyToFrequency) {
             oscillatorPools[key] = [];
             for (let i = 0; i < poolSizePerKey; i++) {
@@ -273,13 +464,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 const modulatorOsc1 = audioContext.createOscillator();
                 const mainGain = audioContext.createGain();
                 const modGain1 = audioContext.createGain();
-                mainGain.connect(audioContext.destination);
+                const pannerNode = audioContext.createStereoPanner();
+                
+                mainGain.connect(pannerNode);
+                pannerNode.connect(effectsChainInput);
+                
                 mainGain.gain.setValueAtTime(0, audioContext.currentTime);
-                modGain1.gain.setValueAtTime(0, audioContext.currentTime);
                 carrierOsc.start();
                 modulatorOsc1.start();
                 oscillatorPools[key].push({
-                    carrierOsc, modulatorOsc1, mainGain, modGain1,
+                    carrierOsc, modulatorOsc1, mainGain, modGain1, pannerNode,
                     busy: false, key, busyTimeoutId: null, isPlayback: false,
                     _currentWaveformType: null, _activeNodeConnections: [], _auxNodes: []
                 });
@@ -292,7 +486,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (audioContext && audioContext.state === 'running') preCreateOscillatorPools();
             if (!oscillatorPools[key]) return null;
         }
-        return oscillatorPools[key].find(s => !s.busy);
+        
+        let sound = oscillatorPools[key].find(s => !s.busy);
+        if (sound) {
+            return sound;
+        }
+
+        console.warn(`No free oscillator for key ${key}, stealing a voice.`);
+        sound = oscillatorPools[key][0];
+        forceResetSound(sound);
+        return sound;
     }
 
     function forceResetSound(sound) {
@@ -334,6 +537,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (!baseKeyToFrequency[key]) return null;
 
+        // Robust Note Handling: Stop any existing note for this key before starting a new one.
+        if (activeNoteSounds.has(key)) {
+            stopNote(key, true); // Force stop to override sustain
+        }
+        
         const now = audioContext.currentTime;
         let actualWaveformToUse, noteDataOctaveShiftValue, noteDataVolumeValue;
 
@@ -346,103 +554,111 @@ document.addEventListener('DOMContentLoaded', () => {
             actualWaveformToUse = playbackNoteData.waveform || currentWaveform;
         } else {
             noteDataOctaveShiftValue = octaveShift;
-            noteDataVolumeValue = globalVolume;
+            noteDataVolumeValue = NOTE_BASE_GAIN;
             actualWaveformToUse = currentWaveform;
         }
 
         const baseFreq = baseKeyToFrequency[key];
         const rootFrequency = getShiftedFrequency(baseFreq, noteDataOctaveShiftValue);
-        const gainPerVoice = currentUnisonVoices > 0 ? noteDataVolumeValue / Math.sqrt(currentUnisonVoices) : 0;
+        
         let soundObjectsStarted = [];
 
         for (let i = 0; i < currentUnisonVoices; i++) {
-            const sound = getFreeOscillator(key);
-            if (!sound) {
+            const voiceSound = getFreeOscillator(key);
+             if (!voiceSound) {
                 console.warn(`No free oscillator for unison voice ${i + 1} of key ${key}`);
                 continue;
             }
-            forceResetSound(sound);
-            sound.busy = true;
-            sound.isPlayback = forPlayback;
-            sound.key = key;
-            sound._currentWaveformType = actualWaveformToUse;
+            forceResetSound(voiceSound);
+            voiceSound.busy = true;
+            voiceSound.isPlayback = forPlayback;
+            voiceSound.key = key;
+            voiceSound._currentWaveformType = actualWaveformToUse;
 
             let detuneCentsForThisVoice = 0;
+            let panForThisVoice = 0;
             if (currentUnisonVoices > 1) {
                 const offsetRatio = (currentUnisonVoices === 1) ? 0 : (i - (currentUnisonVoices - 1) / 2) / ((currentUnisonVoices - 1) / 2);
                 detuneCentsForThisVoice = currentDetuneAmount * offsetRatio;
+                panForThisVoice = stereoSpreadAmount * offsetRatio;
             }
 
+            voiceSound.pannerNode.pan.setValueAtTime(panForThisVoice, now);
             const finalFrequency = rootFrequency * Math.pow(2, detuneCentsForThisVoice / 1200);
-            sound.carrierOsc.frequency.setValueAtTime(finalFrequency, now);
+            voiceSound.carrierOsc.frequency.setValueAtTime(finalFrequency, now);
 
             switch (actualWaveformToUse) {
                 case 'sine': case 'square': case 'sawtooth': case 'triangle':
-                    sound.carrierOsc.type = actualWaveformToUse;
-                    sound.carrierOsc.connect(sound.mainGain);
-                    sound._activeNodeConnections.push({ source: sound.carrierOsc, destination: sound.mainGain });
+                    voiceSound.carrierOsc.type = actualWaveformToUse;
+                    voiceSound.carrierOsc.connect(voiceSound.mainGain);
+                    voiceSound._activeNodeConnections.push({ source: voiceSound.carrierOsc, destination: voiceSound.mainGain });
                     break;
                 case 'pwm':
-                    if (pwmPeriodicWave) sound.carrierOsc.setPeriodicWave(pwmPeriodicWave);
-                    else sound.carrierOsc.type = 'square';
-                    sound.carrierOsc.connect(sound.mainGain);
-                    sound._activeNodeConnections.push({ source: sound.carrierOsc, destination: sound.mainGain });
+                    if (pwmPeriodicWave) voiceSound.carrierOsc.setPeriodicWave(pwmPeriodicWave);
+                    else voiceSound.carrierOsc.type = 'square';
+                    voiceSound.carrierOsc.connect(voiceSound.mainGain);
+                    voiceSound._activeNodeConnections.push({ source: voiceSound.carrierOsc, destination: voiceSound.mainGain });
                     break;
                 case 'fm':
-                    sound.carrierOsc.type = 'sine'; sound.modulatorOsc1.type = 'sine';
+                    voiceSound.carrierOsc.type = 'sine'; voiceSound.modulatorOsc1.type = 'sine';
                     const modulatorFreqFM = finalFrequency * FM_MODULATOR_RATIO;
                     const modIndexFM = finalFrequency * FM_MODULATION_INDEX_SCALE;
-                    sound.modulatorOsc1.frequency.setValueAtTime(modulatorFreqFM, now);
-                    sound.modGain1.gain.setValueAtTime(modIndexFM, now);
-                    sound.modulatorOsc1.connect(sound.modGain1);
-                    sound._activeNodeConnections.push({ source: sound.modulatorOsc1, destination: sound.modGain1 });
-                    sound.modGain1.connect(sound.carrierOsc.frequency);
-                    sound._activeNodeConnections.push({ source: sound.modGain1, destination: sound.carrierOsc, param: 'frequency' });
-                    sound.carrierOsc.connect(sound.mainGain);
-                    sound._activeNodeConnections.push({ source: sound.carrierOsc, destination: sound.mainGain });
+                    voiceSound.modulatorOsc1.frequency.setValueAtTime(modulatorFreqFM, now);
+                    voiceSound.modGain1.gain.setValueAtTime(modIndexFM, now);
+                    voiceSound.modulatorOsc1.connect(voiceSound.modGain1);
+                    voiceSound._activeNodeConnections.push({ source: voiceSound.modulatorOsc1, destination: voiceSound.modGain1 });
+                    voiceSound.modGain1.connect(voiceSound.carrierOsc.frequency);
+                    voiceSound._activeNodeConnections.push({ source: voiceSound.modGain1, destination: voiceSound.carrierOsc, param: 'frequency' });
+                    voiceSound.carrierOsc.connect(voiceSound.mainGain);
+                    voiceSound._activeNodeConnections.push({ source: voiceSound.carrierOsc, destination: voiceSound.mainGain });
                     break;
                 case 'am':
-                    sound.carrierOsc.type = 'sine'; sound.modulatorOsc1.type = 'sine';
-                    sound.modulatorOsc1.frequency.setValueAtTime(AM_MODULATOR_FREQ, now);
+                    voiceSound.carrierOsc.type = 'sine'; voiceSound.modulatorOsc1.type = 'sine';
+                    voiceSound.modulatorOsc1.frequency.setValueAtTime(AM_MODULATOR_FREQ, now);
                     const baseGainAM = 1.0 - (AM_MODULATION_DEPTH / 2);
                     const modScaleAM = AM_MODULATION_DEPTH / 2;
                     const dcOffsetNodeAM = audioContext.createConstantSource();
-                    dcOffsetNodeAM.offset.value = baseGainAM; dcOffsetNodeAM.start(now); sound._auxNodes.push(dcOffsetNodeAM);
+                    dcOffsetNodeAM.offset.value = baseGainAM; dcOffsetNodeAM.start(now); voiceSound._auxNodes.push(dcOffsetNodeAM);
                     const modulatorScaleGainAM = audioContext.createGain();
-                    modulatorScaleGainAM.gain.value = modScaleAM; sound._auxNodes.push(modulatorScaleGainAM);
-                    sound.modulatorOsc1.connect(modulatorScaleGainAM);
-                    dcOffsetNodeAM.connect(sound.modGain1.gain);
-                    sound._activeNodeConnections.push({ source: dcOffsetNodeAM, destination: sound.modGain1, param: 'gain' });
-                    modulatorScaleGainAM.connect(sound.modGain1.gain);
-                    sound._activeNodeConnections.push({ source: modulatorScaleGainAM, destination: sound.modGain1, param: 'gain' });
-                    sound.carrierOsc.connect(sound.modGain1);
-                    sound._activeNodeConnections.push({ source: sound.carrierOsc, destination: sound.modGain1 });
-                    sound.modGain1.connect(sound.mainGain);
-                    sound._activeNodeConnections.push({ source: sound.modGain1, destination: sound.mainGain });
+                    modulatorScaleGainAM.gain.value = modScaleAM; voiceSound._auxNodes.push(modulatorScaleGainAM);
+                    voiceSound.modulatorOsc1.connect(modulatorScaleGainAM);
+                    dcOffsetNodeAM.connect(voiceSound.modGain1.gain);
+                    voiceSound._activeNodeConnections.push({ source: dcOffsetNodeAM, destination: voiceSound.modGain1, param: 'gain' });
+                    modulatorScaleGainAM.connect(voiceSound.modGain1.gain);
+                    voiceSound._activeNodeConnections.push({ source: modulatorScaleGainAM, destination: voiceSound.modGain1, param: 'gain' });
+                    voiceSound.carrierOsc.connect(voiceSound.modGain1);
+                    voiceSound._activeNodeConnections.push({ source: voiceSound.carrierOsc, destination: voiceSound.modGain1 });
+                    voiceSound.modGain1.connect(voiceSound.mainGain);
+                    voiceSound._activeNodeConnections.push({ source: voiceSound.modGain1, destination: voiceSound.mainGain });
                     break;
                 case 'ring':
-                    sound.carrierOsc.type = 'sine'; sound.modulatorOsc1.type = 'sine';
-                    sound.modulatorOsc1.frequency.setValueAtTime(finalFrequency * RING_MOD_RATIO, now);
-                    sound.modulatorOsc1.connect(sound.modGain1.gain);
-                    sound._activeNodeConnections.push({ source: sound.modulatorOsc1, destination: sound.modGain1, param: 'gain' });
-                    sound.carrierOsc.connect(sound.modGain1);
-                    sound._activeNodeConnections.push({ source: sound.carrierOsc, destination: sound.modGain1 });
-                    sound.modGain1.connect(sound.mainGain);
-                    sound._activeNodeConnections.push({ source: sound.modGain1, destination: sound.mainGain });
+                    voiceSound.carrierOsc.type = 'sine'; voiceSound.modulatorOsc1.type = 'sine';
+                    voiceSound.modulatorOsc1.frequency.setValueAtTime(finalFrequency * RING_MOD_RATIO, now);
+                    voiceSound.modulatorOsc1.connect(voiceSound.modGain1.gain);
+                    voiceSound._activeNodeConnections.push({ source: voiceSound.modulatorOsc1, destination: voiceSound.modGain1, param: 'gain' });
+                    voiceSound.carrierOsc.connect(voiceSound.modGain1);
+                    voiceSound._activeNodeConnections.push({ source: voiceSound.carrierOsc, destination: voiceSound.modGain1 });
+                    voiceSound.modGain1.connect(voiceSound.mainGain);
+                    voiceSound._activeNodeConnections.push({ source: voiceSound.modGain1, destination: voiceSound.mainGain });
                     break;
                 default:
-                    sound.carrierOsc.type = 'sine';
-                    sound.carrierOsc.connect(sound.mainGain);
-                    sound._activeNodeConnections.push({ source: sound.carrierOsc, destination: sound.mainGain });
+                    voiceSound.carrierOsc.type = 'sine';
+                    voiceSound.carrierOsc.connect(voiceSound.mainGain);
+                    voiceSound._activeNodeConnections.push({ source: voiceSound.carrierOsc, destination: voiceSound.mainGain });
                     break;
             }
-            sound.mainGain.gain.cancelScheduledValues(now);
-            sound.mainGain.gain.setValueAtTime(0, now);
-            sound.mainGain.gain.linearRampToValueAtTime(gainPerVoice, now + attackTime);
-            soundObjectsStarted.push(sound);
+            const gainPerVoice = currentUnisonVoices > 0 ? noteDataVolumeValue / Math.sqrt(currentUnisonVoices) : 0;
+            voiceSound.mainGain.gain.cancelScheduledValues(now);
+            voiceSound.mainGain.gain.setValueAtTime(0, now);
+            voiceSound.mainGain.gain.linearRampToValueAtTime(gainPerVoice, now + attackTime);
+            soundObjectsStarted.push(voiceSound);
         }
 
         if (soundObjectsStarted.length === 0) return null;
+        
+        // Add the new sounds to our state map
+        activeNoteSounds.set(key, soundObjectsStarted);
+
         if (kbdElements[key]) kbdElements[key].classList.add('active');
         
         if (!forPlayback) {
@@ -464,6 +680,16 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        let soundsToProcess = [];
+        if(soundToStop) {
+            soundsToProcess = Array.isArray(soundToStop) ? soundToStop : [soundToStop];
+        } else if (activeNoteSounds.has(key)) {
+            soundsToProcess = activeNoteSounds.get(key);
+            activeNoteSounds.delete(key);
+        } else {
+            return; // Nothing to stop for this key
+        }
+
         if (!forPlayback && isRecording && activeRecordingNotes[key]) {
             const noteData = activeRecordingNotes[key];
             const startTimeOffset = noteData.startTimeAbsolute - recordingStartTime;
@@ -478,57 +704,46 @@ document.addEventListener('DOMContentLoaded', () => {
             delete activeRecordingNotes[key];
         }
 
-        if (!audioContext || !baseKeyToFrequency[key] || !oscillatorPools[key]) return;
+        if (!audioContext) return;
         const currentRelTime = forPlayback ? (playbackRelTime !== null ? playbackRelTime : releaseTime) : releaseTime;
-        let soundsToProcess = [];
-        if (soundToStop) {
-            if (Array.isArray(soundToStop)) { soundsToProcess = soundToStop; }
-            else { soundsToProcess = [soundToStop]; }
-        } else {
-            if (oscillatorPools[key]) {
-              soundsToProcess = oscillatorPools[key].filter(s => s.busy && s.isPlayback === forPlayback && s.key === key);
-            }
-        }
-
+        
         soundsToProcess.forEach(sound => {
-            if (!sound || !sound.busy) return;
+            if (!sound) return;
             const now = audioContext.currentTime;
+            
+            // Mark as not busy immediately for the pool, but continue fade out
+            sound.busy = false;
+
             if (sound.mainGain && sound.mainGain.gain && typeof sound.mainGain.gain.cancelScheduledValues === 'function') {
                 sound.mainGain.gain.cancelScheduledValues(now);
                 sound.mainGain.gain.setValueAtTime(sound.mainGain.gain.value, now);
                 sound.mainGain.gain.linearRampToValueAtTime(0.0001, now + currentRelTime);
             } else {
                 forceResetSound(sound);
-                checkAndDeactivateVisual(sound.key || key);
-                return;
             }
             if (sound.busyTimeoutId) clearTimeout(sound.busyTimeoutId);
             sound.busyTimeoutId = setTimeout(() => {
                 if (sound.busyTimeoutId === null) return;
-                forceResetSound(sound);
+                forceResetSound(sound); // Full cleanup after fade
                 checkAndDeactivateVisual(sound.key || key);
-            }, (currentRelTime * 1000) + 50);
+            }, (currentRelTime * 1000) + 100);
         });
 
         if (forceStop && !forPlayback) sustainedNotes.delete(key);
-        if (soundsToProcess.length === 0 && !forPlayback) {
-            checkAndDeactivateVisual(key);
-        }
+        
+        // Visuals are tricky. Let's check after a short delay to let audio settle.
+        setTimeout(() => checkAndDeactivateVisual(key), 50);
     }
 
 
     function checkAndDeactivateVisual(key) {
         if (!kbdElements[key]) return;
-        let isAudioActiveForKey = false;
-        if (oscillatorPools[key]) {
-            isAudioActiveForKey = oscillatorPools[key].some(s => s.busy && s.mainGain && s.mainGain.gain.value > 0.00015);
-        }
-        const isDirectlyHeld = physicallyDownKeys.has(key) ||
-                               (currentTouchedKeyForDrag === key) ||
-                               (isMouseButton1Down && kbdElements[key].matches(':hover'));
+
+        const isLogicallyOn = activeNoteSounds.has(key);
+        const isDirectlyHeld = physicallyDownKeys.has(key) || (currentTouchedKeyForDrag === key);
         const isSustainedByPedal = sustainPedal && sustainedNotes.has(key);
 
-        if (isDirectlyHeld || isSustainedByPedal || isAudioActiveForKey) {
+        if (isLogicallyOn || isDirectlyHeld || isSustainedByPedal) {
             if (!kbdElements[key].classList.contains('active')) kbdElements[key].classList.add('active');
         } else {
             kbdElements[key].classList.remove('active');
@@ -554,10 +769,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!sustainPedal) {
                 sustainPedal = true; noteDisplay.textContent = "Sustain ON";
                 physicallyDownKeys.forEach(heldKey => { if (baseKeyToFrequency[heldKey]) sustainedNotes.add(heldKey); });
-                Object.keys(activeRecordingNotes).forEach(recKey => {
-                    sustainedNotes.add(recKey);
-                    if (kbdElements[recKey] && !kbdElements[recKey].classList.contains('active')) kbdElements[recKey].classList.add('active');
-                });
             } return;
         }
         if (event.code === "ArrowUp") { octaveShift++; octaveShiftDisplay.textContent = octaveShift; return; }
@@ -579,20 +790,13 @@ document.addEventListener('DOMContentLoaded', () => {
             event.preventDefault(); sustainPedal = false; noteDisplay.textContent = "Sustain OFF";
             const notesToPotentiallyStop = new Set(sustainedNotes); sustainedNotes.clear();
             notesToPotentiallyStop.forEach(noteKey => {
-                const isStillDirectlyHeld = physicallyDownKeys.has(noteKey) ||
-                                           (currentTouchedKeyForDrag === noteKey) ||
-                                           (isMouseButton1Down && kbdElements[noteKey]?.matches(':hover'));
-                if (!isStillDirectlyHeld) stopNote(noteKey, true);
+                if (!physicallyDownKeys.has(noteKey)) {
+                    stopNote(noteKey, true);
+                }
             });
             setTimeout(() => {
-                 if (!physicallyDownKeys.size && !sustainedNotes.size && !Object.keys(activeRecordingNotes).length) {
-                     let stillPlaying = false;
-                     for(const k_osc in oscillatorPools) {
-                         if(oscillatorPools[k_osc] && oscillatorPools[k_osc].some(s => s.busy && s.mainGain && s.mainGain.gain.value > 0.001)) {
-                             stillPlaying = true; break;
-                         }
-                     }
-                     if(!stillPlaying && noteDisplay.textContent === "Sustain OFF") noteDisplay.textContent = ' ';
+                 if (!physicallyDownKeys.size && !sustainedNotes.size && !activeNoteSounds.size && noteDisplay.textContent === "Sustain OFF") {
+                     noteDisplay.textContent = ' ';
                  }
             }, releaseTime * 1000 + 100);
             return;
@@ -603,19 +807,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     volumeSlider.addEventListener('input', () => {
-        globalVolume = parseFloat(volumeSlider.value);
+        const newVolume = parseFloat(volumeSlider.value);
+        if (masterOutputGain && audioContext) {
+            masterOutputGain.gain.setTargetAtTime(newVolume, audioContext.currentTime, 0.01);
+        }
     });
 
     volumeSlider.addEventListener('change', () => {
-        const newVolume = parseFloat(volumeSlider.value);
-        if (recordedSequence.length > 0) {
-            recordedSequence.forEach(note => {
-                note.volume = newVolume;
-            });
-            updateSequenceDisplay(-1);
-            noteDisplay.textContent = "Sequence Volume Updated";
-            setTimeout(() => { if (noteDisplay.textContent === "Sequence Volume Updated") noteDisplay.textContent = ' '; }, 2000);
-        }
         volumeSlider.blur();
     });
 
@@ -741,12 +939,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         kbd.addEventListener('touchend', (e) => {
             e.preventDefault(); if (isPlayingBack) return;
-            let touchLiftedFromThisKey = true;
-            if (touchLiftedFromThisKey || e.touches.length === 0) stopNote(keyVal);
-
-            if (currentTouchedKeyForDrag === keyVal && !Array.from(e.touches).some(t => document.elementFromPoint(t.clientX, t.clientY) === kbd)) {
-                currentTouchedKeyForDrag = null;
-            }
+            stopNote(keyVal);
+            currentTouchedKeyForDrag = null;
         });
     });
     
@@ -785,16 +979,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Metronome Logic ---
 
     function playMetronomeTick() {
-        if (!audioContext) return;
+        if (!audioContext || !masterOutputGain) return;
         const now = audioContext.currentTime;
         const osc = audioContext.createOscillator();
         const gain = audioContext.createGain();
         osc.type = 'sine';
         osc.frequency.setValueAtTime(1000, now);
         osc.connect(gain);
-        gain.connect(audioContext.destination);
-        // Use the dedicated metronome volume, also affected by the main volume
-        gain.gain.setValueAtTime(metronomeVolume * globalVolume, now);
+        gain.connect(masterOutputGain);
+        gain.gain.setValueAtTime(metronomeVolume, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
         osc.start(now);
         osc.stop(now + 0.05);
@@ -806,7 +999,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isMetronomeOn) {
                 playMetronomeTick();
             }
-            // Each tick is a quarter note
             const secondsPerBeat = 60.0 / bpm;
             nextNoteTime += secondsPerBeat;
         }
@@ -1041,15 +1233,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         const lastNote = recordedSequence[recordedSequence.length - 1];
-        const lastNoteRelTime = lastNote.releaseTime !== undefined ? lastNote.releaseTime : releaseTime;
-        const sequenceDuration = lastNote.startTime + lastNote.duration + lastNoteRelTime + 0.1;
+        if (lastNote) {
+            const lastNoteRelTime = lastNote.releaseTime !== undefined ? lastNote.releaseTime : releaseTime;
+            const sequenceDuration = lastNote.startTime + lastNote.duration + lastNoteRelTime + 0.1;
 
-        const loopTimeoutId = setTimeout(() => {
-            if (isPlayingBack) {
-                playSequence();
-            }
-        }, sequenceDuration * 1000);
-        playbackTimeouts.push({ type: 'loop', id: loopTimeoutId });
+            const loopTimeoutId = setTimeout(() => {
+                if (isPlayingBack) {
+                    playSequence();
+                }
+            }, sequenceDuration * 1000);
+            playbackTimeouts.push({ type: 'loop', id: loopTimeoutId });
+        } else {
+             stopSequencePlayback(true);
+        }
     }
 
     function forceStopAllPlaybackOscillators() {
@@ -1090,6 +1286,14 @@ document.addEventListener('DOMContentLoaded', () => {
             isRecording = false; recordBtn.classList.remove('recording');
             recordBtn.textContent = '⏺️ Record'; activeRecordingNotes = {};
         }
+
+        // Force stop all active sounds by iterating our robust map
+        activeNoteSounds.forEach((sounds, key) => {
+            stopNote(key, true);
+        });
+        activeNoteSounds.clear();
+        
+        // Also do the low-level pool sweep as a final safety measure
         if (audioContext) {
             for (const poolKey in oscillatorPools) {
                 if (oscillatorPools.hasOwnProperty(poolKey)) {
@@ -1097,8 +1301,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
-        activePlaybackNoteSounds.clear(); sustainPedal = false; sustainedNotes.clear();
-        physicallyDownKeys.clear(); currentTouchedKeyForDrag = null; activeRecordingNotes = {};
+        
+        sustainPedal = false; sustainedNotes.clear();
+        physicallyDownKeys.clear(); currentTouchedKeyForDrag = null;
 
         noteDisplay.textContent = "ALL STOPPED 🛑"; updateSequenceDisplay(-1); updateSequencerControls();
         setTimeout(() => {
@@ -1282,33 +1487,114 @@ document.addEventListener('DOMContentLoaded', () => {
         pasteSequenceBtn.blur();
     });
 
+    function bindEffectsControls() {
+        const reverbMix = document.getElementById('reverb-mix'), reverbMixDisplay = document.getElementById('reverb-mix-display');
+        const delayTime = document.getElementById('delay-time'), delayTimeDisplay = document.getElementById('delay-time-display');
+        const delayFeedback = document.getElementById('delay-feedback'), delayFeedbackDisplay = document.getElementById('delay-feedback-display');
+        const delayMix = document.getElementById('delay-mix'), delayMixDisplay = document.getElementById('delay-mix-display');
+        const distortionAmount = document.getElementById('distortion-amount'), distortionAmountDisplay = document.getElementById('distortion-amount-display');
+        const distortionType = document.getElementById('distortion-type');
+        const modEffectRate = document.getElementById('mod-effect-rate'), modEffectRateDisplay = document.getElementById('mod-effect-rate-display');
+        const modEffectDepth = document.getElementById('mod-effect-depth'), modEffectDepthDisplay = document.getElementById('mod-effect-depth-display');
+        const modEffectType = document.getElementById('mod-effect-type');
+        const stereoSpreadAmountSlider = document.getElementById('stereo-spread-amount'), stereoSpreadAmountDisplay = document.getElementById('stereo-spread-amount-display');
+
+        reverbMix.addEventListener('input', () => {
+            const val = parseFloat(reverbMix.value);
+            if (reverbMixNode && audioContext) reverbMixNode.gain.setTargetAtTime(val, audioContext.currentTime, 0.01);
+            reverbMixDisplay.textContent = val.toFixed(2);
+        });
+        delayTime.addEventListener('input', () => {
+            const val = parseFloat(delayTime.value);
+            if (delayNode && audioContext) delayNode.delayTime.setTargetAtTime(val, audioContext.currentTime, 0.01);
+            delayTimeDisplay.textContent = val.toFixed(2);
+        });
+        delayFeedback.addEventListener('input', () => {
+            const val = parseFloat(delayFeedback.value);
+            if (delayFeedbackNode && audioContext) delayFeedbackNode.gain.setTargetAtTime(val, audioContext.currentTime, 0.01);
+            delayFeedbackDisplay.textContent = val.toFixed(2);
+        });
+        delayMix.addEventListener('input', () => {
+            const val = parseFloat(delayMix.value);
+            if (delayMixNode && audioContext) delayMixNode.gain.setTargetAtTime(val, audioContext.currentTime, 0.01);
+            delayMixDisplay.textContent = val.toFixed(2);
+        });
+        const updateDistortion = () => {
+            if (!distortionNode || !audioContext) return;
+            const amount = parseFloat(distortionAmount.value);
+            distortionNode.curve = makeDistortionCurve(amount, distortionType.value);
+            distortionAmountDisplay.textContent = amount;
+        };
+        distortionAmount.addEventListener('input', updateDistortion);
+        distortionType.addEventListener('change', updateDistortion);
+
+        const updateModEffect = () => {
+            if (!modLfo || !modLfoGain || !modDelay || !modFeedbackGain || !audioContext) return;
+            const rate = parseFloat(modEffectRate.value), depth = parseFloat(modEffectDepth.value), type = modEffectType.value;
+            modLfo.frequency.setTargetAtTime(rate, audioContext.currentTime, 0.01);
+            if (type === 'chorus') {
+                modFeedbackGain.gain.setTargetAtTime(0.3, audioContext.currentTime, 0.01);
+                modDelay.delayTime.setTargetAtTime(0.025, audioContext.currentTime, 0.01);
+                modLfoGain.gain.setTargetAtTime(depth * 0.005, audioContext.currentTime, 0.01);
+            } else if (type === 'flanger') {
+                modFeedbackGain.gain.setTargetAtTime(0.85, audioContext.currentTime, 0.01);
+                modDelay.delayTime.setTargetAtTime(0.005, audioContext.currentTime, 0.01);
+                modLfoGain.gain.setTargetAtTime(depth * 0.003, audioContext.currentTime, 0.01);
+            }
+            modEffectRateDisplay.textContent = rate.toFixed(1);
+            modEffectDepthDisplay.textContent = depth.toFixed(2);
+        };
+        modEffectRate.addEventListener('input', updateModEffect);
+        modEffectDepth.addEventListener('input', updateModEffect);
+        modEffectType.addEventListener('change', updateModEffect);
+
+        stereoSpreadAmountSlider.addEventListener('input', () => {
+            stereoSpreadAmount = parseFloat(stereoSpreadAmountSlider.value);
+            stereoSpreadAmountDisplay.textContent = stereoSpreadAmount.toFixed(2);
+        });
+    }
 
     function initialSetup() {
         const defaultPanel = panelsConfig.find(p => p.name === 'Seq');
-        if (defaultPanel) {
-            openPanel(defaultPanel.panel);
-        } else {
-            closeAllPanels();
-        }
+        if (defaultPanel) { openPanel(defaultPanel.panel); }
+        else { closeAllPanels(); }
 
         currentWaveform = waveformSelect.value;
         const ddwo = document.getElementById('dynamic-default-waveform-option');
         if (ddwo) {
-            ddwo.value = "";
-            ddwo.textContent = "Default (---)";
-            ddwo.hidden = true;
-            ddwo.disabled = true;
+            ddwo.value = ""; ddwo.textContent = "Default (---)";
+            ddwo.hidden = true; ddwo.disabled = true;
         }
 
-        volumeSlider.value = String(globalVolume);
         octaveShiftDisplay.textContent = octaveShift;
-        
         if (metronomeVolumeSlider) metronomeVolumeSlider.value = String(metronomeVolume);
-
         if (unisonVoicesSlider) unisonVoicesSlider.value = String(unisonVoices);
         if (unisonVoicesDisplay) unisonVoicesDisplay.textContent = unisonVoices;
         if (unisonDetuneSlider) unisonDetuneSlider.value = String(detuneAmount);
         if (unisonDetuneDisplay) unisonDetuneDisplay.textContent = detuneAmount;
+
+        // Activate effects panel controls and add Bypass button
+        const effectsPanelHeading = effectsPanel.querySelector('h2');
+        if(effectsPanelHeading) {
+            fxBypassToggleBtn = document.createElement('button');
+            fxBypassToggleBtn.id = 'fx-bypass-toggle';
+            fxBypassToggleBtn.textContent = '🔊 FX On';
+            fxBypassToggleBtn.style.cssText = `
+                display: block; width: 100%; margin: 15px 0; padding: 10px 12px; font-size: 0.95em;
+                background-color: #007bff; border-color: #0056b3; color: white; border: 1px solid;
+                border-radius: 4px; cursor: pointer; text-align: center;
+            `;
+            fxBypassToggleBtn.addEventListener('click', () => {
+                isFxBypassed = !isFxBypassed;
+                updateFxBypassState();
+                fxBypassToggleBtn.blur();
+            });
+            effectsPanelHeading.after(fxBypassToggleBtn);
+        }
+
+        effectsPanel.querySelectorAll('input, select').forEach(el => el.disabled = false);
+        effectsPanel.querySelectorAll('p').forEach(p => p.style.display = 'none');
+        bindEffectsControls();
 
         updateAudioStatus("Initializing..."); updateSequenceDisplay(-1); updateSequencerControls();
 
@@ -1323,7 +1609,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let initialUnlockDone = false;
-        const initialUnlockHandler = (event) => {
+        const initialUnlockHandler = () => {
             if (audioContext && audioContext.state === 'suspended' && !initialUnlockDone) {
                 initializeAudio().then(() => {
                     initialUnlockDone = true;
