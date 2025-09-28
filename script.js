@@ -29,6 +29,24 @@ document.addEventListener('DOMContentLoaded', () => {
         setDarkMode(true); // Default to dark mode
     }
 
+    // --- HELP PANEL LOGIC (PART 1: Selectors and Functions) ---
+    const helpToggleBtn = document.getElementById('help-toggle-btn');
+    const helpPanel = document.getElementById('help-panel');
+    const helpPanelCloseBtn = document.querySelector('.help-panel-close');
+
+    function toggleHelpPanel() {
+        if (helpPanel) helpPanel.classList.toggle('visible');
+    }
+
+    function hideHelpPanel() {
+        if (helpPanel) helpPanel.classList.remove('visible');
+    }
+
+    if (helpToggleBtn && helpPanelCloseBtn) {
+        helpToggleBtn.addEventListener('click', toggleHelpPanel);
+        helpPanelCloseBtn.addEventListener('click', hideHelpPanel);
+    }
+
     // --- Audio Setup & State ---
     let audioContext;
     let audioInitializationPromise = null; // FIX: For robust, race-free initialization
@@ -791,9 +809,29 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     window.addEventListener('mouseup', (event) => { if (event.button === 0) isMouseButton1Down = false; });
     
+    // --- KEYBOARD EVENT HANDLING (MODIFIED FOR HELP PANEL) ---
     window.addEventListener('keydown', (event) => {
         if (event.target.tagName === 'TEXTAREA' || event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT') return;
-        if (event.key === "Escape") { event.preventDefault(); panicStopAllSoundsAndReset(); return; }
+
+        // --- HELP PANEL HOTKEY ---
+        if (event.key.toLowerCase() === 'm') {
+            event.preventDefault();
+            toggleHelpPanel();
+            return; // Prevent other actions when opening help
+        }
+        
+        if (event.key === "Escape") {
+            event.preventDefault();
+            // If help panel is open, prioritize closing it.
+            if (helpPanel && helpPanel.classList.contains('visible')) {
+                hideHelpPanel();
+            } else {
+                // Otherwise, do the original panic stop.
+                panicStopAllSoundsAndReset();
+            }
+            return;
+        }
+        
         if (event.repeat || isPlayingBack) return;
         initializeAudio().catch(e => console.error("Audio init on keydown failed", e));
         
