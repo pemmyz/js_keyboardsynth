@@ -423,3 +423,106 @@ body.panel-open-main-adjust #toggle-panel-btn { /* Sequencer button */
 body.panel-open-main-adjust #toggle-effects-panel-btn { /* Effects button */
     right: calc(var(--fx-panel-btn-orig-right) + var(--panel-padding-adjustment));
 }
+
+/* --- Help Button and Panel --- */
+#help-toggle-btn {
+    position: fixed;
+    bottom: 10px;
+    left: 10px;
+    padding: 6px 12px;
+    font-size: 0.9em;
+    cursor: pointer;
+    background: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 5px;
+    transition: background 0.3s, color 0.3s;
+    z-index: 1001;
+}
+body.light-mode #help-toggle-btn {
+    background: #ddd;
+    color: #000;
+    border-color: #bbb;
+}
+#help-toggle-btn:hover {
+    background-color: #4a4a4a;
+}
+body.light-mode #help-toggle-btn:hover {
+    background-color: #ccc;
+}
+#help-panel {
+    display: none; /* Hidden by default, toggled with JS by adding a .visible class */
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 500px;
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    border-radius: 8px;
+    padding: 20px 25px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.7);
+    z-index: 1002;
+    text-align: left;
+}
+body.light-mode #help-panel {
+    background-color: #f9f9f9;
+    color: #333;
+    border-color: #ccc;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+}
+#help-panel.visible {
+    display: block;
+}
+#help-panel h2 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #555;
+    padding-bottom: 10px;
+}
+body.light-mode #help-panel h2 {
+    border-bottom-color: #ccc;
+}
+#help-panel p, #help-panel ul {
+    margin: 15px 0;
+    line-height: 1.6;
+}
+#help-panel ul {
+    padding-left: 20px;
+}
+#help-panel li {
+    margin-bottom: 8px;
+}
+#help-panel a {
+    color: #8ab4f8;
+    text-decoration: none;
+}
+#help-panel a:hover {
+    text-decoration: underline;
+}
+body.light-mode #help-panel a {
+    color: #0056b3;
+}
+.help-panel-close {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    background: none;
+    border: none;
+    font-size: 2em;
+    color: #aaa;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+}
+.help-panel-close:hover {
+    color: #fff;
+}
+body.light-mode .help-panel-close {
+    color: #888;
+}
+body.light-mode .help-panel-close:hover {
+    color: #000;
+}
