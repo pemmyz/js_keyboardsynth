@@ -13,15 +13,21 @@
     --seq-panel-btn-orig-right: calc(var(--fx-panel-btn-orig-right) + var(--button-common-width) + var(--button-margin)); /* 130 + 110 + 10 = 250px */
 }
 
+/* ROOT & BODY SETUP */
 body {
+    margin: 0;
+    background-color: #121212;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden; /* Prevent scrolling on outer edge */
     font-family: sans-serif;
     text-align: center;
-    padding: 20px;
-    background-color: #121212;
     color: #e0e0e0;
-    transition: background-color 0.3s, color 0.3s, padding-right 0.3s ease-in-out; /* Added padding-right transition */
+    transition: background-color 0.3s, color 0.3s, padding-right 0.3s ease-in-out;
     touch-action: manipulation;
-    overflow-x: hidden; /* Prevent horizontal scroll with panel */
 }
 
 body.light-mode {
@@ -29,15 +35,115 @@ body.light-mode {
     color: #000;
 }
 
+/* --- THE SCREEN (Fixed Internal Resolution) --- */
+#screen {
+    width: 960px;  /* Base Width */
+    height: 720px; /* Base Height */
+    position: relative;
+    overflow-x: hidden;
+    overflow-y: auto;
+    /* Important for scaling from the middle */
+    transform-origin: center center; 
+    box-shadow: 0 0 50px rgba(0,0,0,0.8);
+    flex-shrink: 0;
+    padding: 20px; /* Replaced body padding */
+    box-sizing: border-box;
+    background-color: transparent;
+}
+
+/* --- MOBILE MODE LOCK --- */
+body.mobile-mode {
+    background: #000; /* Outer boundary becomes black when active */
+    overflow: hidden; 
+    touch-action: none; 
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+}
+body.mobile-mode #screen {
+    background-color: #121212; 
+}
+body.light-mode.mobile-mode #screen {
+    background-color: #fff;
+}
+
+/* --- TOGGLE BUTTON --- */
+#mobile-btn {
+    position: fixed;
+    top: 10px; left: 10px;
+    z-index: 2000;
+    background: #333;
+    color: white;
+    border: 2px solid white;
+    font-size: 12px;
+    padding: 8px;
+    cursor: pointer;
+}
+body.mobile-mode #mobile-btn { display: none; }
+
+/* --- MOBILE CONTROLS OVERLAY --- */
+#mobile-controls {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; 
+    z-index: 3000;
+    display: none; 
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+body.mobile-mode #mobile-controls {
+    display: flex;
+}
+
+/* --- CONTROL BUTTONS --- */
+.mobile-control-btn {
+    pointer-events: auto; 
+    width: 90px; height: 90px;
+    background: rgba(255,255,255,0.15);
+    border: 3px solid rgba(255,255,255,0.4);
+    border-radius: 50%;
+    color: white;
+    font-size: 40px;
+    display: flex; justify-content: center; align-items: center;
+    user-select: none;
+    backdrop-filter: blur(4px);
+    margin-bottom: 20px;
+    transition: transform 0.1s, background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-control-btn:active { 
+    background: rgba(255,255,255,0.4); 
+    transform: scale(0.95);
+}
+
+#mobile-dpad { 
+    display: flex; 
+    gap: 15px; 
+    margin-left: 20px;
+    margin-bottom: 20px;
+}
+
+#mobile-action { 
+    margin-right: 40px; 
+    margin-bottom: 40px;
+}
+
+/* === ORIGINAL SYNTHESIZER STYLES BELOW === */
+
 #audio-status {
     margin: 10px;
     padding: 10px;
     font-weight: bold;
 }
 
-#audio-status.ready { color: #4caf50; } /* Green */
-#audio-status.error, #audio-status.suspended { color: #f44336; } /* Red */
-
+#audio-status.ready { color: #4caf50; } 
+#audio-status.error, #audio-status.suspended { color: #f44336; } 
 
 #keyboard {
     margin-top: 20px;
@@ -69,7 +175,7 @@ body.light-mode kbd {
 }
 
 kbd.active {
-    background: #ffeb3b; /* Yellow */
+    background: #ffeb3b; 
     color: #000;
     border-color: #fbc02d;
     transform: scale(0.95);
@@ -91,8 +197,6 @@ body.light-mode .instructions { color: #555; }
     font-weight: bold;
 }
 
-
-/* --- TIMING CONTROLS SECTION --- */
 .timing-controls-container {
     display: flex;
     justify-content: center;
@@ -126,15 +230,8 @@ body.light-mode .instructions { color: #555; }
     font-family: monospace;
 }
 
-.timing-group input[type="range"] {
-    width: 150px;
-}
-
-/* ADDED: Style for the new metronome volume slider */
-.timing-group input[type="range"]#metronome-volume-slider {
-    width: 80px;
-}
-
+.timing-group input[type="range"] { width: 150px; }
+.timing-group input[type="range"]#metronome-volume-slider { width: 80px; }
 
 .timing-group select {
     background-color: #333;
@@ -145,16 +242,12 @@ body.light-mode .instructions { color: #555; }
     cursor: pointer;
 }
 
-body.light-mode .timing-controls-container {
-    border-color: #ccc;
-}
+body.light-mode .timing-controls-container { border-color: #ccc; }
 body.light-mode .timing-group select {
     background-color: #eee;
     color: #000;
     border-color: #aaa;
 }
-/* --- END TIMING CONTROLS SECTION --- */
-
 
 /* --- Top Right Buttons --- */
 #dark-mode-toggle, #toggle-panel-btn, #toggle-effects-panel-btn {
@@ -167,13 +260,13 @@ body.light-mode .timing-group select {
     color: #fff;
     border: none;
     border-radius: 5px;
-    transition: background 0.3s, color 0.3s, right 0.3s ease-in-out; /* Add right transition */
+    transition: background 0.3s, color 0.3s, right 0.3s ease-in-out; 
     z-index: 1001;
-    min-width: var(--button-common-width); /* Use common width */
-    height: var(--button-height); /* Ensure consistent height */
+    min-width: var(--button-common-width); 
+    height: var(--button-height); 
     box-sizing: border-box;
     text-align: center;
-    line-height: calc(var(--button-height) - 12px); /* Adjust line height for vertical centering of text */
+    line-height: calc(var(--button-height) - 12px); 
 }
 body.light-mode #dark-mode-toggle,
 body.light-mode #toggle-panel-btn,
@@ -183,15 +276,14 @@ body.light-mode #toggle-effects-panel-btn {
 }
 
 #dark-mode-toggle { right: var(--dark-mode-btn-orig-right); }
-#toggle-effects-panel-btn { right: var(--fx-panel-btn-orig-right); } /* Effects Panel Toggle, order changed */
-#toggle-panel-btn { right: var(--seq-panel-btn-orig-right); } /* Sequencer Panel Toggle, order changed */
+#toggle-effects-panel-btn { right: var(--fx-panel-btn-orig-right); } 
+#toggle-panel-btn { right: var(--seq-panel-btn-orig-right); } 
 
-
-/* --- Side Panels (Common Styles) --- */
-#side-panel, #effects-panel { /* Added #effects-panel */
+/* --- Side Panels --- */
+#side-panel, #effects-panel { 
     position: fixed;
     top: 0;
-    right: calc(-1 * var(--panel-width) - 20px); /* Start off-screen, increased width for shadow*/
+    right: calc(-1 * var(--panel-width) - 20px); 
     width: var(--panel-width);
     height: 100%;
     background-color: #1e1e1e;
@@ -207,27 +299,22 @@ body.light-mode #toggle-effects-panel-btn {
 }
 
 body.light-mode #side-panel,
-body.light-mode #effects-panel { /* Added #effects-panel */
+body.light-mode #effects-panel { 
     background-color: #f4f4f4;
     color: #333;
     box-shadow: -3px 0 8px rgba(0,0,0,0.1);
 }
 
-#side-panel.visible, #effects-panel.visible { /* Added #effects-panel */
-    right: 0;
-}
+#side-panel.visible, #effects-panel.visible { right: 0; }
 
-#side-panel h2, #effects-panel h2 { /* Added #effects-panel */
+#side-panel h2, #effects-panel h2 { 
     margin-top: 0;
     text-align: left;
     color: #e0e0e0;
 }
 body.light-mode #side-panel h2,
-body.light-mode #effects-panel h2 { /* Added #effects-panel */
-    color: #333;
-}
+body.light-mode #effects-panel h2 { color: #333; }
 
-/* --- Sequencer Panel Specific --- */
 #note-sequence-display {
     width: 100%;
     flex-grow: 1;
@@ -317,12 +404,8 @@ body.light-mode #record-btn.recording {
     border-color: #cc0000;
     color: white;
 }
-body.light-mode #record-btn.recording:hover {
-    background-color: #e00;
-}
-#side-panel input[type="file"] {
-    display: none;
-}
+body.light-mode #record-btn.recording:hover { background-color: #e00; }
+#side-panel input[type="file"] { display: none; }
 #side-panel .button-like-label[for="import-file-input"]:not(.disabled-label) {
      background-color: #007bff;
      border-color: #0056b3;
@@ -341,8 +424,6 @@ body.light-mode #side-panel .button-like-label[for="import-file-input"]:not(.dis
     border-color: #005cbf;
 }
 
-
-/* --- Effects Panel Specific --- */
 #effects-panel .effect-group {
     margin-bottom: 20px;
     padding-bottom: 15px;
@@ -360,18 +441,16 @@ body.light-mode #effects-panel .effect-group {
     margin-top: 0;
     margin-bottom: 10px;
     font-size: 1.1em;
-    color: #ccc; /* Lighter than main text for subheadings */
+    color: #ccc; 
 }
-body.light-mode #effects-panel h3 {
-    color: #555;
-}
+body.light-mode #effects-panel h3 { color: #555; }
 #effects-panel label {
     display: block;
     margin-bottom: 5px;
     font-size: 0.9em;
 }
 #effects-panel input[type="range"] {
-    width: calc(100% - 55px); /* Adjust width to make space for span */
+    width: calc(100% - 55px); 
     margin-right: 10px;
     vertical-align: middle;
 }
@@ -390,39 +469,28 @@ body.light-mode #effects-panel select {
     color: #000;
     border: 1px solid #ccc;
 }
-#effects-panel span { /* For displaying slider values */
+#effects-panel span { 
     display: inline-block;
-    width: 40px; /* Fixed width for value display */
+    width: 40px; 
     font-size: 0.9em;
     vertical-align: middle;
     text-align: right;
 }
-#effects-panel p { /* For "coming soon" text */
+#effects-panel p { 
     font-style: italic;
     font-size: 0.9em;
     color: #888;
     margin-top: 8px;
 }
-body.light-mode #effects-panel p {
-    color: #777;
-}
+body.light-mode #effects-panel p { color: #777; }
 
-
-/* Main content area adjustment when a panel is visible */
 body.panel-open-main-adjust {
     padding-right: var(--panel-padding-adjustment);
 }
 
-/* Adjust all top-right buttons when a panel is open */
-body.panel-open-main-adjust #dark-mode-toggle {
-    right: calc(var(--dark-mode-btn-orig-right) + var(--panel-padding-adjustment));
-}
-body.panel-open-main-adjust #toggle-panel-btn { /* Sequencer button */
-    right: calc(var(--seq-panel-btn-orig-right) + var(--panel-padding-adjustment));
-}
-body.panel-open-main-adjust #toggle-effects-panel-btn { /* Effects button */
-    right: calc(var(--fx-panel-btn-orig-right) + var(--panel-padding-adjustment));
-}
+body.panel-open-main-adjust #dark-mode-toggle { right: calc(var(--dark-mode-btn-orig-right) + var(--panel-padding-adjustment)); }
+body.panel-open-main-adjust #toggle-panel-btn { right: calc(var(--seq-panel-btn-orig-right) + var(--panel-padding-adjustment)); }
+body.panel-open-main-adjust #toggle-effects-panel-btn { right: calc(var(--fx-panel-btn-orig-right) + var(--panel-padding-adjustment)); }
 
 /* --- Help Button and Panel --- */
 #help-toggle-btn {
@@ -444,14 +512,10 @@ body.light-mode #help-toggle-btn {
     color: #000;
     border-color: #bbb;
 }
-#help-toggle-btn:hover {
-    background-color: #4a4a4a;
-}
-body.light-mode #help-toggle-btn:hover {
-    background-color: #ccc;
-}
+#help-toggle-btn:hover { background-color: #4a4a4a; }
+body.light-mode #help-toggle-btn:hover { background-color: #ccc; }
 #help-panel {
-    display: none; /* Hidden by default, toggled with JS by adding a .visible class */
+    display: none; 
     position: fixed;
     top: 50%;
     left: 50%;
@@ -473,38 +537,26 @@ body.light-mode #help-panel {
     border-color: #ccc;
     box-shadow: 0 5px 20px rgba(0,0,0,0.2);
 }
-#help-panel.visible {
-    display: block;
-}
+#help-panel.visible { display: block; }
 #help-panel h2 {
     margin-top: 0;
     margin-bottom: 15px;
     border-bottom: 1px solid #555;
     padding-bottom: 10px;
 }
-body.light-mode #help-panel h2 {
-    border-bottom-color: #ccc;
-}
+body.light-mode #help-panel h2 { border-bottom-color: #ccc; }
 #help-panel p, #help-panel ul {
     margin: 15px 0;
     line-height: 1.6;
 }
-#help-panel ul {
-    padding-left: 20px;
-}
-#help-panel li {
-    margin-bottom: 8px;
-}
+#help-panel ul { padding-left: 20px; }
+#help-panel li { margin-bottom: 8px; }
 #help-panel a {
     color: #8ab4f8;
     text-decoration: none;
 }
-#help-panel a:hover {
-    text-decoration: underline;
-}
-body.light-mode #help-panel a {
-    color: #0056b3;
-}
+#help-panel a:hover { text-decoration: underline; }
+body.light-mode #help-panel a { color: #0056b3; }
 .help-panel-close {
     position: absolute;
     top: 10px;
@@ -517,12 +569,6 @@ body.light-mode #help-panel a {
     line-height: 1;
     padding: 0;
 }
-.help-panel-close:hover {
-    color: #fff;
-}
-body.light-mode .help-panel-close {
-    color: #888;
-}
-body.light-mode .help-panel-close:hover {
-    color: #000;
-}
+.help-panel-close:hover { color: #fff; }
+body.light-mode .help-panel-close { color: #888; }
+body.light-mode .help-panel-close:hover { color: #000; }

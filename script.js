@@ -101,7 +101,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // live @ https://pemmyz.github.io/js_keyboardsynth/
 // Repo @ https://github.com/pemmyz/js_keyboardsynth`;
 
-
     const baseKeyToFrequency = {
         'q': 261.63, '2': 277.18, 'w': 293.66, '3': 311.13, 'e': 329.63, 'r': 349.23,
         '5': 369.99, 't': 392.00, '6': 415.30, 'y': 440.00, '7': 466.16, 'u': 493.88,
@@ -1704,4 +1703,103 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     initialSetup();
+});
+
+
+// ==========================================
+// --- MOBILE SCALING AND TOUCH CONTROLS ---
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+    const mobileToggleBtn = document.getElementById('mobile-btn');
+    const mobileControls = document.getElementById('mobile-controls');
+    const mobileLeftBtn = document.getElementById('mobile-left');
+    const mobileRightBtn = document.getElementById('mobile-right');
+    const mobileUpBtn = document.getElementById('mobile-up');
+    const screenElement = document.getElementById("screen");
+
+    // Global input state placeholder
+    const keys = { ArrowUp: false, ArrowLeft: false, ArrowRight: false, w: false, a: false, d: false, ' ': false };
+
+    // --- 1. SCALING LOGIC ---
+    function scaleGame() {
+        const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+
+        if (isFullscreen) {
+            const baseWidth = 960;
+            const baseHeight = 720;
+            
+            // Calculate the scale to fit the window while maintaining aspect ratio
+            const scale = Math.min(
+                window.innerWidth / baseWidth,
+                window.innerHeight / baseHeight
+            );
+            
+            screenElement.style.transform = `scale(${scale})`;
+            document.body.classList.add('mobile-mode'); // Activates CSS lock
+        } else {
+            screenElement.style.transform = 'none'; 
+            document.body.classList.remove('mobile-mode');
+        }
+    }
+
+    // --- 2. FULLSCREEN TRIGGER ---
+    function goFull() {
+        const el = document.documentElement;
+        if (el.requestFullscreen) el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    }
+
+    // Listeners for resizing and fullscreen changes
+    window.addEventListener("resize", scaleGame);
+    window.addEventListener("fullscreenchange", scaleGame);
+    window.addEventListener("webkitfullscreenchange", scaleGame);
+
+    // Initial check
+    scaleGame();
+
+    // Button Listener
+    if (mobileToggleBtn) {
+        mobileToggleBtn.addEventListener('click', goFull);
+    }
+
+    // --- 3. MOBILE CONTROLS LOGIC ---
+    function setupMobileControls() {
+        if (!mobileControls) return;
+
+        // Helper to map touch/mouse events to keys and dispatch native events
+        // so it natively triggers the Synthesizer logic via the original EventListeners.
+        const addControlListener = (element, key) => {
+            if (!element) return;
+            const pressKey = (e) => {
+                if(e.cancelable) e.preventDefault(); 
+                keys[key] = true;
+                window.dispatchEvent(new KeyboardEvent('keydown', { key: key }));
+            };
+            const releaseKey = (e) => {
+                if(e.cancelable) e.preventDefault();
+                keys[key] = false;
+                window.dispatchEvent(new KeyboardEvent('keyup', { key: key }));
+            };
+
+            // Touch Events
+            element.addEventListener('touchstart', pressKey, { passive: false });
+            element.addEventListener('touchend', releaseKey, { passive: false });
+            element.addEventListener('touchcancel', releaseKey, { passive: false });
+            
+            // Mouse Events (for testing on desktop)
+            element.addEventListener('mousedown', pressKey);
+            element.addEventListener('mouseup', releaseKey);
+            element.addEventListener('mouseleave', (e) => {
+                if (e.buttons === 1) { releaseKey(e); }
+            });
+        };
+
+        // Maps to keys in your Synth (a = F5, d = A5, w = D4)
+        addControlListener(mobileLeftBtn, 'a'); // Left
+        addControlListener(mobileRightBtn, 'd'); // Right
+        addControlListener(mobileUpBtn, 'w');    // Thrust/Jump
+    }
+
+    // Initialize controls
+    setupMobileControls();
 });

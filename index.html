@@ -3,177 +3,195 @@
 <head>
     <meta charset="UTF-8">
     <title>Super Deluxe Synth - Note Display</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <!-- REQUIRED METADATA -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <button id="toggle-panel-btn">🎹 Seq</button>
-    <button id="toggle-effects-panel-btn">🎛️ FX</button>
-    <button id="dark-mode-toggle">☀️ Light Mode</button>
+    <!-- TOGGLE BUTTON -->
+    <button id="mobile-btn">📱 Fullscreen / Mobile Controls</button>
 
-    <h1>🎹 Super Deluxe Synth</h1>
+    <!-- GAME CONTAINER (Wraps the content to be scaled) -->
+    <div id="game-container">
+        <!-- THE SCREEN: Fixed resolution internal logic (960x720) -->
+        <div id="screen">
+            <button id="toggle-panel-btn">🎹 Seq</button>
+            <button id="toggle-effects-panel-btn">🎛️ FX</button>
+            <button id="dark-mode-toggle">☀️ Light Mode</button>
 
-    <div id="audio-status">Loading...</div>
+            <h1>🎹 Super Deluxe Synth</h1>
 
-    <label for="waveform-select">Waveform:</label>
-    <select id="waveform-select">
-        <option id="dynamic-default-waveform-option" value="" hidden>Default (---)</option>
-        <option value="sine">Sine</option>
-        <option value="square" selected>Square</option>
-        <option value="sawtooth">Sawtooth</option>
-        <option value="triangle">Triangle</option>
-        <option value="pwm">PWM</option>
-        <option value="fm">FM</option>
-        <option value="am">AM</option>
-        <option value="ring">Ring Mod</option>
-    </select>
+            <div id="audio-status">Loading...</div>
 
-    <br><br>
-
-    <label for="unison-voices-slider">Unison Voices:</label>
-    <input type="range" id="unison-voices-slider" min="1" max="5" step="1" value="1">
-    <span id="unison-voices-display">1</span>
-
-    <br><br>
-
-    <label for="unison-detune-slider">Detune (cents):</label>
-    <input type="range" id="unison-detune-slider" min="0" max="50" step="1" value="0">
-    <span id="unison-detune-display">0</span>
-
-    <br><br>
-
-    <label for="volume-slider">Volume:</label>
-    <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.1">
-
-    <br><br>
-
-    <div>Octave Shift: <span id="octave-shift-display">0</span></div>
-    <div class="instructions">Use ↑ and ↓ arrow keys to shift octaves. Space for sustain.</div>
-
-    <!-- Metronome Controls (Volume Slider Added) -->
-    <div class="timing-controls-container">
-        <div class="timing-group">
-            <input type="checkbox" id="metronome-toggle">
-            <label for="metronome-toggle">Metronome</label>
-            <label for="metronome-volume-slider">Vol:</label>
-            <input type="range" id="metronome-volume-slider" min="0" max="1" step="0.01" value="0.7">
-            <label for="bpm-slider" class="bpm-label">BPM: <span id="bpm-display">120</span></label>
-            <input type="range" id="bpm-slider" min="60" max="240" step="1" value="120">
-        </div>
-    </div>
-    <!-- END MODIFIED SECTION -->
-
-
-    <div id="note-display"> </div>
-
-    <div id="keyboard">
-        <div class="row">
-            <kbd>2</kbd><kbd>3</kbd><kbd>5</kbd><kbd>6</kbd><kbd>7</kbd><kbd>9</kbd><kbd>0</kbd>
-        </div>
-        <div class="row">
-            <kbd>q</kbd><kbd>w</kbd><kbd>e</kbd><kbd>r</kbd><kbd>t</kbd><kbd>y</kbd><kbd>u</kbd><kbd>i</kbd><kbd>o</kbd><kbd>p</kbd>
-        </div>
-        <div class="row">
-            <kbd>a</kbd><kbd>s</kbd><kbd>d</kbd><kbd>f</kbd><kbd>g</kbd><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd>
-        </div>
-        <div class="row">
-            <kbd>z</kbd><kbd>x</kbd><kbd>c</kbd>
-        </div>
-    </div>
-
-    <div id="side-panel">
-        <h2>Sequencer</h2>
-        <button id="record-btn">⏺️ Record</button>
-        <button id="play-btn" disabled>▶️ Play</button>
-        <button id="stop-playback-btn" disabled>⏹️ Stop Playback</button>
-        <textarea id="note-sequence-display" placeholder="Recorded notes will appear here... (Editable for JSON paste)"></textarea>
-        <div id="sequence-clipboard-buttons">
-            <button id="copy-sequence-btn">📄 Copy</button>
-            <button id="paste-sequence-btn">📋 Paste</button>
-        </div>
-        <button id="export-btn" disabled>📤 Export Sequence</button>
-        <label for="import-file-input" class="button-like-label">📥 Import Sequence</label>
-        <input type="file" id="import-file-input" accept=".json">
-        <button id="clear-sequence-btn">🗑️ Clear Sequence</button>
-    </div>
-
-    <div id="effects-panel">
-        <h2>Effects</h2>
-        <div class="effect-group">
-            <h3>Reverb</h3>
-            <label for="reverb-mix">Mix:</label>
-            <input type="range" id="reverb-mix" min="0" max="1" step="0.01" value="0" disabled>
-            <span id="reverb-mix-display">0</span>
-            <p>(Coming Soon)</p>
-        </div>
-        <div class="effect-group">
-            <h3>Delay</h3>
-            <label for="delay-time">Time (s):</label>
-            <input type="range" id="delay-time" min="0.05" max="2" step="0.01" value="0.5" disabled>
-            <span id="delay-time-display">0.5</span>
-            <label for="delay-feedback">Feedback:</label>
-            <input type="range" id="delay-feedback" min="0" max="0.95" step="0.01" value="0.3" disabled>
-            <span id="delay-feedback-display">0.3</span>
-            <label for="delay-mix">Mix:</label>
-            <input type="range" id="delay-mix" min="0" max="1" step="0.01" value="0" disabled>
-            <span id="delay-mix-display">0</span>
-            <p>(Coming Soon)</p>
-        </div>
-        <div class="effect-group">
-            <h3>Distortion / Overdrive</h3>
-            <label for="distortion-amount">Amount:</label>
-            <input type="range" id="distortion-amount" min="0" max="100" step="1" value="0" disabled>
-            <span id="distortion-amount-display">0</span>
-             <label for="distortion-type">Type:</label>
-            <select id="distortion-type" disabled>
-                <option value="overdrive">Overdrive</option>
-                <option value="distortion">Distortion</option>
-                <option value="fuzz">Fuzz</option>
-                <option value="bitcrush">Bitcrusher</option>
+            <label for="waveform-select">Waveform:</label>
+            <select id="waveform-select">
+                <option id="dynamic-default-waveform-option" value="" hidden>Default (---)</option>
+                <option value="sine">Sine</option>
+                <option value="square" selected>Square</option>
+                <option value="sawtooth">Sawtooth</option>
+                <option value="triangle">Triangle</option>
+                <option value="pwm">PWM</option>
+                <option value="fm">FM</option>
+                <option value="am">AM</option>
+                <option value="ring">Ring Mod</option>
             </select>
-            <p>(Coming Soon)</p>
-        </div>
-        <div class="effect-group">
-            <h3>Chorus / Flanger / Phaser</h3>
-            <label for="mod-effect-rate">Rate (Hz):</label>
-            <input type="range" id="mod-effect-rate" min="0.1" max="10" step="0.1" value="1" disabled>
-            <span id="mod-effect-rate-display">1.0</span>
-            <label for="mod-effect-depth">Depth:</label>
-            <input type="range" id="mod-effect-depth" min="0" max="1" step="0.01" value="0.02" disabled>
-            <span id="mod-effect-depth-display">0.02</span>
-            <label for="mod-effect-type">Type:</label>
-            <select id="mod-effect-type" disabled>
-                <option value="chorus">Chorus</option>
-                <option value="flanger">Flanger</option>
-                <option value="phaser">Phaser</option>
-            </select>
-            <p>(Coming Soon)</p>
-        </div>
-        <div class="effect-group">
-            <h3>Stereo Spread</h3>
-            <label for="stereo-spread-amount">Amount:</label>
-            <input type="range" id="stereo-spread-amount" min="0" max="1" step="0.01" value="0" disabled>
-            <span id="stereo-spread-amount-display">0</span>
-            <p>(Coming Soon)</p>
+
+            <br><br>
+
+            <label for="unison-voices-slider">Unison Voices:</label>
+            <input type="range" id="unison-voices-slider" min="1" max="5" step="1" value="1">
+            <span id="unison-voices-display">1</span>
+
+            <br><br>
+
+            <label for="unison-detune-slider">Detune (cents):</label>
+            <input type="range" id="unison-detune-slider" min="0" max="50" step="1" value="0">
+            <span id="unison-detune-display">0</span>
+
+            <br><br>
+
+            <label for="volume-slider">Volume:</label>
+            <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.1">
+
+            <br><br>
+
+            <div>Octave Shift: <span id="octave-shift-display">0</span></div>
+            <div class="instructions">Use ↑ and ↓ arrow keys to shift octaves. Space for sustain.</div>
+
+            <!-- Metronome Controls -->
+            <div class="timing-controls-container">
+                <div class="timing-group">
+                    <input type="checkbox" id="metronome-toggle">
+                    <label for="metronome-toggle">Metronome</label>
+                    <label for="metronome-volume-slider">Vol:</label>
+                    <input type="range" id="metronome-volume-slider" min="0" max="1" step="0.01" value="0.7">
+                    <label for="bpm-slider" class="bpm-label">BPM: <span id="bpm-display">120</span></label>
+                    <input type="range" id="bpm-slider" min="60" max="240" step="1" value="120">
+                </div>
+            </div>
+
+            <div id="note-display">&nbsp;</div>
+
+            <div id="keyboard">
+                <div class="row">
+                    <kbd>2</kbd><kbd>3</kbd><kbd>5</kbd><kbd>6</kbd><kbd>7</kbd><kbd>9</kbd><kbd>0</kbd>
+                </div>
+                <div class="row">
+                    <kbd>q</kbd><kbd>w</kbd><kbd>e</kbd><kbd>r</kbd><kbd>t</kbd><kbd>y</kbd><kbd>u</kbd><kbd>i</kbd><kbd>o</kbd><kbd>p</kbd>
+                </div>
+                <div class="row">
+                    <kbd>a</kbd><kbd>s</kbd><kbd>d</kbd><kbd>f</kbd><kbd>g</kbd><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd>
+                </div>
+                <div class="row">
+                    <kbd>z</kbd><kbd>x</kbd><kbd>c</kbd>
+                </div>
+            </div>
+
+            <div id="side-panel">
+                <h2>Sequencer</h2>
+                <button id="record-btn">⏺️ Record</button>
+                <button id="play-btn" disabled>▶️ Play</button>
+                <button id="stop-playback-btn" disabled>⏹️ Stop Playback</button>
+                <textarea id="note-sequence-display" placeholder="Recorded notes will appear here... (Editable for JSON paste)"></textarea>
+                <div id="sequence-clipboard-buttons">
+                    <button id="copy-sequence-btn">📄 Copy</button>
+                    <button id="paste-sequence-btn">📋 Paste</button>
+                </div>
+                <button id="export-btn" disabled>📤 Export Sequence</button>
+                <label for="import-file-input" class="button-like-label">📥 Import Sequence</label>
+                <input type="file" id="import-file-input" accept=".json">
+                <button id="clear-sequence-btn">🗑️ Clear Sequence</button>
+            </div>
+
+            <div id="effects-panel">
+                <h2>Effects</h2>
+                <div class="effect-group">
+                    <h3>Reverb</h3>
+                    <label for="reverb-mix">Mix:</label>
+                    <input type="range" id="reverb-mix" min="0" max="1" step="0.01" value="0" disabled>
+                    <span id="reverb-mix-display">0</span>
+                    <p>(Coming Soon)</p>
+                </div>
+                <div class="effect-group">
+                    <h3>Delay</h3>
+                    <label for="delay-time">Time (s):</label>
+                    <input type="range" id="delay-time" min="0.05" max="2" step="0.01" value="0.5" disabled>
+                    <span id="delay-time-display">0.5</span>
+                    <label for="delay-feedback">Feedback:</label>
+                    <input type="range" id="delay-feedback" min="0" max="0.95" step="0.01" value="0.3" disabled>
+                    <span id="delay-feedback-display">0.3</span>
+                    <label for="delay-mix">Mix:</label>
+                    <input type="range" id="delay-mix" min="0" max="1" step="0.01" value="0" disabled>
+                    <span id="delay-mix-display">0</span>
+                    <p>(Coming Soon)</p>
+                </div>
+                <div class="effect-group">
+                    <h3>Distortion / Overdrive</h3>
+                    <label for="distortion-amount">Amount:</label>
+                    <input type="range" id="distortion-amount" min="0" max="100" step="1" value="0" disabled>
+                    <span id="distortion-amount-display">0</span>
+                     <label for="distortion-type">Type:</label>
+                    <select id="distortion-type" disabled>
+                        <option value="overdrive">Overdrive</option>
+                        <option value="distortion">Distortion</option>
+                        <option value="fuzz">Fuzz</option>
+                        <option value="bitcrush">Bitcrusher</option>
+                    </select>
+                    <p>(Coming Soon)</p>
+                </div>
+                <div class="effect-group">
+                    <h3>Chorus / Flanger / Phaser</h3>
+                    <label for="mod-effect-rate">Rate (Hz):</label>
+                    <input type="range" id="mod-effect-rate" min="0.1" max="10" step="0.1" value="1" disabled>
+                    <span id="mod-effect-rate-display">1.0</span>
+                    <label for="mod-effect-depth">Depth:</label>
+                    <input type="range" id="mod-effect-depth" min="0" max="1" step="0.01" value="0.02" disabled>
+                    <span id="mod-effect-depth-display">0.02</span>
+                    <label for="mod-effect-type">Type:</label>
+                    <select id="mod-effect-type" disabled>
+                        <option value="chorus">Chorus</option>
+                        <option value="flanger">Flanger</option>
+                        <option value="phaser">Phaser</option>
+                    </select>
+                    <p>(Coming Soon)</p>
+                </div>
+                <div class="effect-group">
+                    <h3>Stereo Spread</h3>
+                    <label for="stereo-spread-amount">Amount:</label>
+                    <input type="range" id="stereo-spread-amount" min="0" max="1" step="0.01" value="0" disabled>
+                    <span id="stereo-spread-amount-display">0</span>
+                    <p>(Coming Soon)</p>
+                </div>
+            </div>
+
+            <!-- Help Button and Panel -->
+            <button id="help-toggle-btn">Press M -key for Help</button>
+            <div id="help-panel">
+                <button class="help-panel-close">&times;</button>
+                <h2>Help & Info</h2>
+                <p>A browser-based synthesizer playable with your computer keyboard. Change sounds, record sequences, and more.</p>
+                <ul>
+                    <li><b>Keyboard:</b> Use the keys shown on screen to play notes.</li>
+                    <li><b>Octave Shift:</b> Use '↑' and '↓' arrow keys.</li>
+                    <li><b>Sustain:</b> Press and hold the Spacebar.</li>
+                    <li><b>Sequencer (🎹 Seq):</b> Record, play, copy, and save your melodies.</li>
+                    <li><b>Effects (🎛️ FX):</b> Add effects like reverb and delay (work in progress).</li>
+                </ul>
+                <p><b>Link to repo:</b> <a href="https://github.com/pemmyz/js_keyboardsynth" target="_blank" rel="noopener noreferrer">https://github.com/pemmyz/js_keyboardsynth</a></p>
+            </div>
         </div>
     </div>
 
-    <!-- Help Button and Panel -->
-    <button id="help-toggle-btn">Press M -key for Help</button>
-    <div id="help-panel">
-        <button class="help-panel-close">&times;</button>
-        <h2>Help & Info</h2>
-        <p>A browser-based synthesizer playable with your computer keyboard. Change sounds, record sequences, and more.</p>
-        <ul>
-            <li><b>Keyboard:</b> Use the keys shown on screen to play notes.</li>
-            <li><b>Octave Shift:</b> Use '↑' and '↓' arrow keys.</li>
-            <li><b>Sustain:</b> Press and hold the Spacebar.</li>
-            <li><b>Sequencer (🎹 Seq):</b> Record, play, copy, and save your melodies.</li>
-            <li><b>Effects (🎛️ FX):</b> Add effects like reverb and delay (work in progress).</li>
-        </ul>
-        <p><b>Link to repo:</b> <a href="https://github.com/pemmyz/js_keyboardsynth" target="_blank" rel="noopener noreferrer">https://github.com/pemmyz/js_keyboardsynth</a></p>
+    <!-- MOBILE TOUCH CONTROLS OVERLAY -->
+    <div id="mobile-controls">
+        <div id="mobile-dpad">
+            <button id="mobile-left" class="mobile-control-btn">◀</button>
+            <button id="mobile-right" class="mobile-control-btn">▶</button>
+        </div>
+        <div id="mobile-action">
+            <button id="mobile-up" class="mobile-control-btn">▲</button>
+        </div>
     </div>
-
 
     <script src="script.js"></script>
 </body>
