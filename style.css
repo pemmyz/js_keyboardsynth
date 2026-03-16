@@ -59,20 +59,34 @@ body.light-mode {
    MOBILE FULLSCREEN SCALING MODE ONLY
    ========================================== */
 
+html.mobile-mode {
+    overflow: hidden; /* Absolute lockdown of browser scrollbars */
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
 /* Triggers when the Fullscreen JS adds the .mobile-mode class */
 body.mobile-mode {
     background: #000; /* Outer boundary becomes black */
-    padding: 0 !important;
+    padding: 0 !important; /* Overrides desktop panel offset */
+    margin: 0;
     overflow: hidden; 
     touch-action: none; 
     position: fixed;
     display: flex;
     justify-content: center;
     align-items: center;
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     top: 0;
     left: 0;
+}
+
+/* Neutralize desktop side-panel push effect so the scaled screen stays perfectly centered */
+body.mobile-mode.panel-open-main-adjust {
+    padding-right: 0 !important;
 }
 
 body.mobile-mode #mobile-btn { display: none; }
@@ -83,14 +97,14 @@ body.mobile-mode #game-container {
     align-items: center;
     width: 100%;
     height: 100%;
+    overflow: hidden;
 }
 
 body.mobile-mode #screen {
-    width: 960px;  /* Fixed Scale Width */
-    height: 720px; /* Fixed Scale Height */
+    width: 1000px;  /* Increased to prevent horizontal cramming */
+    height: 850px;  /* Increased height to fit all UI elements without scroll */
     position: relative;
-    overflow-x: hidden;
-    overflow-y: auto; /* Contains the scrollbar ONLY inside the scaled box */
+    overflow: hidden; /* GUARANTEES no inner scrollbars */
     transform-origin: center center; 
     box-shadow: 0 0 50px rgba(0,0,0,0.8);
     flex-shrink: 0;

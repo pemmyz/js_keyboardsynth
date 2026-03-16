@@ -1725,8 +1725,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
 
         if (isFullscreen) {
-            const baseWidth = 960;
-            const baseHeight = 720;
+            // Increased the base dimensions to prevent UI cramping/internal scrollbars
+            const baseWidth = 1000;
+            const baseHeight = 850; 
             
             // Calculate the scale to fit the window while maintaining aspect ratio
             const scale = Math.min(
@@ -1735,9 +1736,11 @@ document.addEventListener('DOMContentLoaded', () => {
             );
             
             screenElement.style.transform = `scale(${scale})`;
+            document.documentElement.classList.add('mobile-mode'); // Locks HTML level
             document.body.classList.add('mobile-mode'); // Activates CSS lock
         } else {
             screenElement.style.transform = 'none'; 
+            document.documentElement.classList.remove('mobile-mode');
             document.body.classList.remove('mobile-mode');
         }
     }
