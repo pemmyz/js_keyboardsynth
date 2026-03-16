@@ -1,20 +1,19 @@
 :root {
     color-scheme: dark light;
-    --panel-width: 300px; /* Content width of panels */
-    --panel-padding-adjustment: 320px; /* Body padding when panel is open */
-    --button-height: 34px; /* Approximate height of toggle buttons */
+    --panel-width: 300px;
+    --panel-padding-adjustment: 320px;
+    --button-height: 34px;
 
-    /* Positions of top-right buttons from the viewport edge */
-    --button-common-width: 110px; /* Adjusted common width for all top buttons */
+    --button-common-width: 110px;
     --button-margin: 10px;
 
-    --dark-mode-btn-orig-right: var(--button-margin); /* 10px */
-    --fx-panel-btn-orig-right: calc(var(--dark-mode-btn-orig-right) + var(--button-common-width) + var(--button-margin)); /* 10 + 110 + 10 = 130px */
-    --seq-panel-btn-orig-right: calc(var(--fx-panel-btn-orig-right) + var(--button-common-width) + var(--button-margin)); /* 130 + 110 + 10 = 250px */
+    --dark-mode-btn-orig-right: var(--button-margin);
+    --fx-panel-btn-orig-right: calc(var(--dark-mode-btn-orig-right) + var(--button-common-width) + var(--button-margin));
+    --seq-panel-btn-orig-right: calc(var(--fx-panel-btn-orig-right) + var(--button-common-width) + var(--button-margin));
 }
 
 /* ==========================================
-   DEFAULT DESKTOP MODE (RESTORED ORIGINAL)
+   DEFAULT DESKTOP MODE
    ========================================== */
 
 body {
@@ -26,8 +25,8 @@ body {
     color: #e0e0e0;
     transition: background-color 0.3s, color 0.3s, padding-right 0.3s ease-in-out;
     touch-action: manipulation;
-    overflow-x: hidden; /* Prevent horizontal scroll with panel */
-    overflow-y: auto; /* Allow natural vertical scrolling */
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 body.light-mode {
@@ -35,13 +34,11 @@ body.light-mode {
     color: #000;
 }
 
-/* In desktop mode, these wrappers act as invisible, unconstrained blocks */
 #game-container, #screen {
     width: 100%;
     height: auto;
 }
 
-/* --- TOGGLE BUTTON --- */
 #mobile-btn {
     position: fixed;
     top: 10px; left: 10px;
@@ -54,122 +51,79 @@ body.light-mode {
     cursor: pointer;
 }
 
-
 /* ==========================================
    MOBILE FULLSCREEN SCALING MODE ONLY
    ========================================== */
 
-html.mobile-mode {
-    overflow: hidden; /* Absolute lockdown of browser scrollbars */
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-}
-
-/* Triggers when the Fullscreen JS adds the .mobile-mode class */
+html.mobile-mode,
 body.mobile-mode {
-    background: #000; /* Outer boundary becomes black */
-    padding: 0 !important; /* Overrides desktop panel offset */
+    height: 100%;
+    width: 100%;
     margin: 0;
+    padding: 0 !important;
     overflow: hidden; 
     touch-action: none; 
-    position: fixed;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-    height: 100%;
-    top: 0;
-    left: 0;
-}
-
-/* Neutralize desktop side-panel push effect so the scaled screen stays perfectly centered */
-body.mobile-mode.panel-open-main-adjust {
-    padding-right: 0 !important;
 }
 
 body.mobile-mode #mobile-btn { display: none; }
 
 body.mobile-mode #game-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
     height: 100%;
-    overflow: hidden;
+    width: 100%;
+    display: flex;
 }
 
 body.mobile-mode #screen {
-    width: 1000px;  /* Increased to prevent horizontal cramming */
-    height: 850px;  /* Increased height to fit all UI elements without scroll */
-    position: relative;
-    overflow: hidden; /* GUARANTEES no inner scrollbars */
-    transform-origin: center center; 
-    box-shadow: 0 0 50px rgba(0,0,0,0.8);
-    flex-shrink: 0;
-    padding: 20px;
-    box-sizing: border-box;
-    background-color: #121212; 
-}
-
-body.light-mode.mobile-mode #screen {
-    background-color: #fff;
-}
-
-/* --- MOBILE CONTROLS OVERLAY --- */
-#mobile-controls {
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    pointer-events: none; 
-    z-index: 3000;
-    display: none; 
-    justify-content: space-between;
-    align-items: flex-end;
-    padding: 20px;
-    box-sizing: border-box;
-}
-
-body.mobile-mode #mobile-controls {
     display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    padding: 10px;
+    box-sizing: border-box;
 }
 
-.mobile-control-btn {
-    pointer-events: auto; 
-    width: 90px; height: 90px;
-    background: rgba(255,255,255,0.15);
-    border: 3px solid rgba(255,255,255,0.4);
-    border-radius: 50%;
-    color: white;
-    font-size: 40px;
-    display: flex; justify-content: center; align-items: center;
-    user-select: none;
-    backdrop-filter: blur(4px);
-    margin-bottom: 20px;
-    transition: transform 0.1s, background 0.1s;
-    -webkit-tap-highlight-color: transparent;
+/* Controls stay standard size */
+body.mobile-mode #top-ui {
+    flex-shrink: 0;
+    overflow-y: auto; /* Adds scroll to settings if device screen is very short */
+    max-height: 50vh; /* Ensures keyboard always gets at least half the screen */
 }
 
-.mobile-control-btn:active { 
-    background: rgba(255,255,255,0.4); 
-    transform: scale(0.95);
+/* Keyboard fills all remaining space perfectly */
+body.mobile-mode #keyboard {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    margin-top: 10px;
+    padding-bottom: 5px;
+    box-sizing: border-box;
+    width: 100%;
 }
 
-#mobile-dpad { 
-    display: flex; 
-    gap: 15px; 
-    margin-left: 20px;
-    margin-bottom: 20px;
+body.mobile-mode .row {
+    flex-grow: 1;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin: 3px 0;
+    gap: 6px; /* Spacing between keys */
 }
 
-#mobile-action { 
-    margin-right: 40px; 
-    margin-bottom: 40px;
+body.mobile-mode kbd {
+    flex: 1; /* stretches all keys equally to screen edge */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0; 
+    padding: 0;
+    font-size: 5vh; /* Responsive font size */
+    height: auto; 
+    border-radius: 8px;
 }
-
 
 /* ==========================================
-   ORIGINAL SYNTHESIZER STYLES BELOW
+   ORIGINAL SYNTHESIZER STYLES
    ========================================== */
 
 #audio-status {
@@ -202,6 +156,7 @@ kbd {
     color: #e0e0e0;
     cursor: pointer;
     transition: background 0.1s, border 0.1s, color 0.1s, transform 0.05s;
+    box-sizing: border-box;
 }
 
 body.light-mode kbd {

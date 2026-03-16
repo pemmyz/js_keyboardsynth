@@ -973,7 +973,7 @@ document.addEventListener('DOMContentLoaded', () => {
         waveformSelect.blur();
     });
 
-
+    // --- UPDATED TOUCH & MOUSE EVENT LOGIC ---
     document.querySelectorAll('kbd').forEach(kbd => {
         const keyVal = kbd.textContent.toLowerCase();
         if (!baseKeyToFrequency[keyVal]) return;
@@ -988,6 +988,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isPlayingBack) stopNote(keyVal);
         };
 
+        // Desktop mouse events stay on individual elements
         kbd.addEventListener('mousedown', play);
         kbd.addEventListener('mouseup', stop);
         kbd.addEventListener('mouseleave', (e) => {
@@ -1000,51 +1001,107 @@ document.addEventListener('DOMContentLoaded', () => {
                  playNote(keyVal);
              }
         });
-        
-        kbd.addEventListener('touchstart', (e) => {
-            e.preventDefault(); if (isPlayingBack) return;
-            initializeAudio().catch(e => console.error("Audio init on touchstart failed", e));
-            playNote(keyVal);
-            currentTouchedKeyForDrag = keyVal;
-        }, { passive: false });
-        
-        kbd.addEventListener('touchend', (e) => {
-            e.preventDefault(); if (isPlayingBack) return;
-            stopNote(keyVal);
-            currentTouchedKeyForDrag = null;
-        });
+        // We removed individual kbd touch events here to manage them globally instead
     });
+
+    // --- PROXIMITY CALCULATOR FOR SMOOTH GAPS ---
+    // This allows touches in the "empty space" to play the closest key.
+    function getClosestKeyFromTouch(x, y) {
+        let closestKey = null;
+        let minDistance = Infinity;
+        const keyboardEl = document.getElementById('keyboard');
+        if (!keyboardEl) return null;
+
+        const kbRect = keyboardEl.getBoundingClientRect();
+        // Limit calculation only if touching inside or slightly outside the keyboard boundaries (50px padding)
+        if (x < kbRect.left - 50 || x > kbRect.right + 50 ||
+            y < kbRect.top - 50 || y > kbRect.bottom + 50) {
+            return null;
+        }
+
+        // 1. First check if it's a direct hit (Fastest/most exact)
+        const el = document.elementFromPoint(x, y);
+        if (el && el.tagName === 'KBD') {
+            const keyText = el.textContent.toLowerCase();
+            if (baseKeyToFrequency[keyText]) return keyText;
+        }
+
+        // 2. If touching a gap, find the mathematically closest key
+        for (const keyVal in kbdElements) {
+            const kbdEl = kbdElements[keyVal];
+            const rect = kbdEl.getBoundingClientRect();
+            
+            // Calculate exact distance to the edges of the box, not just the center
+            const dx = Math.max(0, Math.abs(x - (rect.left + rect.width / 2)) - rect.width / 2);
+            const dy = Math.max(0, Math.abs(y - (rect.top + rect.height / 2)) - rect.height / 2);
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < minDistance) {
+                minDistance = dist;
+                closestKey = keyVal;
+            }
+        }
+
+        // Accept it if within a reasonable margin of the closest key
+        return minDistance <= 50 ? closestKey : null;
+    }
     
+    // --- GLOBAL TOUCH HANDLERS ---
+    // Attached to the keyboard container to catch gaps on the very first touch
+    const keyboardContainer = document.getElementById('keyboard');
+    if (keyboardContainer) {
+        keyboardContainer.addEventListener('touchstart', (event) => {
+            if (isPlayingBack) return;
+            initializeAudio().catch(e => console.error("Audio init on touchstart failed", e));
+            
+            if (event.touches.length > 0) {
+                const touch = event.touches[0];
+                const newKeyOver = getClosestKeyFromTouch(touch.clientX, touch.clientY);
+                if (newKeyOver) {
+                    if (event.cancelable) event.preventDefault(); // Prevents zoom/scroll on keys
+                    playNote(newKeyOver);
+                    currentTouchedKeyForDrag = newKeyOver;
+                }
+            }
+        }, { passive: false });
+    }
+    
+    // Handles sweeping/dragging fluidly over margins and keys
     document.addEventListener('touchmove', (event) => {
-        if (isPlayingBack || !currentTouchedKeyForDrag) return;
+        if (isPlayingBack) return;
+        
         if (event.touches.length > 0) {
             const touch = event.touches[0];
-            const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
-            let newKeyOver = null;
-            if (elementUnderTouch && elementUnderTouch.tagName === 'KBD') {
-                newKeyOver = elementUnderTouch.textContent.toLowerCase();
-                if (!baseKeyToFrequency[newKeyOver]) newKeyOver = null;
+            const newKeyOver = getClosestKeyFromTouch(touch.clientX, touch.clientY);
+            
+            // Stop scroll only if we are physically interacting with the keyboard area
+            if (newKeyOver || event.target.closest('#keyboard')) {
+                if (event.cancelable) event.preventDefault();
             }
+
+            // Logic to transition keys smoothly during drag
             if (newKeyOver !== currentTouchedKeyForDrag) {
                 if (currentTouchedKeyForDrag) stopNote(currentTouchedKeyForDrag);
                 if (newKeyOver) playNote(newKeyOver);
                 currentTouchedKeyForDrag = newKeyOver;
             }
-            if (newKeyOver) event.preventDefault();
         }
     }, { passive: false });
     
     document.addEventListener('touchend', (event) => {
         if (currentTouchedKeyForDrag && event.touches.length === 0 && !isPlayingBack) {
-           stopNote(currentTouchedKeyForDrag); currentTouchedKeyForDrag = null;
+           stopNote(currentTouchedKeyForDrag); 
+           currentTouchedKeyForDrag = null;
         }
     });
     
     document.addEventListener('touchcancel', (event) => {
         if (currentTouchedKeyForDrag && !isPlayingBack) {
-            stopNote(currentTouchedKeyForDrag, true); currentTouchedKeyForDrag = null;
+            stopNote(currentTouchedKeyForDrag, true); 
+            currentTouchedKeyForDrag = null;
         }
-        physicallyDownKeys.forEach(physKey => stopNote(physKey, true)); physicallyDownKeys.clear();
+        physicallyDownKeys.forEach(physKey => stopNote(physKey, true)); 
+        physicallyDownKeys.clear();
     });
 
     // --- Metronome Logic ---
@@ -1707,102 +1764,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 // ==========================================
-// --- MOBILE SCALING AND TOUCH CONTROLS ---
+// --- MOBILE FULLSCREEN CONTROLS ---
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
     const mobileToggleBtn = document.getElementById('mobile-btn');
-    const mobileControls = document.getElementById('mobile-controls');
-    const mobileLeftBtn = document.getElementById('mobile-left');
-    const mobileRightBtn = document.getElementById('mobile-right');
-    const mobileUpBtn = document.getElementById('mobile-up');
-    const screenElement = document.getElementById("screen");
 
-    // Global input state placeholder
-    const keys = { ArrowUp: false, ArrowLeft: false, ArrowRight: false, w: false, a: false, d: false, ' ': false };
-
-    // --- 1. SCALING LOGIC ---
-    function scaleGame() {
+    // --- FULLSCREEN LISTENER ---
+    function handleFullscreenChange() {
         const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
 
+        // Toggles our CSS flexbox logic which stretches the keyboard
         if (isFullscreen) {
-            // Increased the base dimensions to prevent UI cramping/internal scrollbars
-            const baseWidth = 1000;
-            const baseHeight = 850; 
-            
-            // Calculate the scale to fit the window while maintaining aspect ratio
-            const scale = Math.min(
-                window.innerWidth / baseWidth,
-                window.innerHeight / baseHeight
-            );
-            
-            screenElement.style.transform = `scale(${scale})`;
-            document.documentElement.classList.add('mobile-mode'); // Locks HTML level
-            document.body.classList.add('mobile-mode'); // Activates CSS lock
+            document.documentElement.classList.add('mobile-mode');
+            document.body.classList.add('mobile-mode');
         } else {
-            screenElement.style.transform = 'none'; 
             document.documentElement.classList.remove('mobile-mode');
             document.body.classList.remove('mobile-mode');
         }
     }
 
-    // --- 2. FULLSCREEN TRIGGER ---
+    // --- TRIGGER FULLSCREEN ---
     function goFull() {
         const el = document.documentElement;
-        if (el.requestFullscreen) el.requestFullscreen();
-        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+        if (el.requestFullscreen) {
+            el.requestFullscreen();
+        } else if (el.webkitRequestFullscreen) {
+            el.webkitRequestFullscreen();
+        }
     }
 
-    // Listeners for resizing and fullscreen changes
-    window.addEventListener("resize", scaleGame);
-    window.addEventListener("fullscreenchange", scaleGame);
-    window.addEventListener("webkitfullscreenchange", scaleGame);
+    window.addEventListener("fullscreenchange", handleFullscreenChange);
+    window.addEventListener("webkitfullscreenchange", handleFullscreenChange);
 
-    // Initial check
-    scaleGame();
-
-    // Button Listener
     if (mobileToggleBtn) {
         mobileToggleBtn.addEventListener('click', goFull);
     }
-
-    // --- 3. MOBILE CONTROLS LOGIC ---
-    function setupMobileControls() {
-        if (!mobileControls) return;
-
-        // Helper to map touch/mouse events to keys and dispatch native events
-        // so it natively triggers the Synthesizer logic via the original EventListeners.
-        const addControlListener = (element, key) => {
-            if (!element) return;
-            const pressKey = (e) => {
-                if(e.cancelable) e.preventDefault(); 
-                keys[key] = true;
-                window.dispatchEvent(new KeyboardEvent('keydown', { key: key }));
-            };
-            const releaseKey = (e) => {
-                if(e.cancelable) e.preventDefault();
-                keys[key] = false;
-                window.dispatchEvent(new KeyboardEvent('keyup', { key: key }));
-            };
-
-            // Touch Events
-            element.addEventListener('touchstart', pressKey, { passive: false });
-            element.addEventListener('touchend', releaseKey, { passive: false });
-            element.addEventListener('touchcancel', releaseKey, { passive: false });
-            
-            // Mouse Events (for testing on desktop)
-            element.addEventListener('mousedown', pressKey);
-            element.addEventListener('mouseup', releaseKey);
-            element.addEventListener('mouseleave', (e) => {
-                if (e.buttons === 1) { releaseKey(e); }
-            });
-        };
-
-        // Maps to keys in your Synth (a = F5, d = A5, w = D4)
-        addControlListener(mobileLeftBtn, 'a'); // Left
-        addControlListener(mobileRightBtn, 'd'); // Right
-        addControlListener(mobileUpBtn, 'w');    // Thrust/Jump
-    }
-
-    // Initialize controls
-    setupMobileControls();
+    
+    // Check initial state
+    handleFullscreenChange();
 });

@@ -3,75 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <title>Super Deluxe Synth - Note Display</title>
-    <!-- REQUIRED METADATA -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <!-- TOGGLE BUTTON -->
-    <button id="mobile-btn">📱 Fullscreen / Mobile Controls</button>
+    <button id="mobile-btn">📱 Fullscreen</button>
 
-    <!-- GAME CONTAINER (Wraps the content to be scaled) -->
     <div id="game-container">
-        <!-- THE SCREEN: Fixed resolution internal logic only active in mobile mode -->
         <div id="screen">
-            <button id="toggle-panel-btn">🎹 Seq</button>
-            <button id="toggle-effects-panel-btn">🎛️ FX</button>
-            <button id="dark-mode-toggle">☀️ Light Mode</button>
+            
+            <!-- TOP UI: Stays normal size in fullscreen -->
+            <div id="top-ui">
+                <button id="toggle-panel-btn">🎹 Seq</button>
+                <button id="toggle-effects-panel-btn">🎛️ FX</button>
+                <button id="dark-mode-toggle">☀️ Light Mode</button>
 
-            <h1>🎹 Super Deluxe Synth</h1>
+                <h1>🎹 Super Deluxe Synth</h1>
 
-            <div id="audio-status">Loading...</div>
+                <div id="audio-status">Loading...</div>
 
-            <label for="waveform-select">Waveform:</label>
-            <select id="waveform-select">
-                <option id="dynamic-default-waveform-option" value="" hidden>Default (---)</option>
-                <option value="sine">Sine</option>
-                <option value="square" selected>Square</option>
-                <option value="sawtooth">Sawtooth</option>
-                <option value="triangle">Triangle</option>
-                <option value="pwm">PWM</option>
-                <option value="fm">FM</option>
-                <option value="am">AM</option>
-                <option value="ring">Ring Mod</option>
-            </select>
+                <label for="waveform-select">Waveform:</label>
+                <select id="waveform-select">
+                    <option id="dynamic-default-waveform-option" value="" hidden>Default (---)</option>
+                    <option value="sine">Sine</option>
+                    <option value="square" selected>Square</option>
+                    <option value="sawtooth">Sawtooth</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="pwm">PWM</option>
+                    <option value="fm">FM</option>
+                    <option value="am">AM</option>
+                    <option value="ring">Ring Mod</option>
+                </select>
 
-            <br><br>
+                <br><br>
 
-            <label for="unison-voices-slider">Unison Voices:</label>
-            <input type="range" id="unison-voices-slider" min="1" max="5" step="1" value="1">
-            <span id="unison-voices-display">1</span>
+                <label for="unison-voices-slider">Unison Voices:</label>
+                <input type="range" id="unison-voices-slider" min="1" max="5" step="1" value="1">
+                <span id="unison-voices-display">1</span>
 
-            <br><br>
+                <br><br>
 
-            <label for="unison-detune-slider">Detune (cents):</label>
-            <input type="range" id="unison-detune-slider" min="0" max="50" step="1" value="0">
-            <span id="unison-detune-display">0</span>
+                <label for="unison-detune-slider">Detune (cents):</label>
+                <input type="range" id="unison-detune-slider" min="0" max="50" step="1" value="0">
+                <span id="unison-detune-display">0</span>
 
-            <br><br>
+                <br><br>
 
-            <label for="volume-slider">Volume:</label>
-            <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.1">
+                <label for="volume-slider">Volume:</label>
+                <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.1">
 
-            <br><br>
+                <br><br>
 
-            <div>Octave Shift: <span id="octave-shift-display">0</span></div>
-            <div class="instructions">Use ↑ and ↓ arrow keys to shift octaves. Space for sustain.</div>
+                <div>Octave Shift: <span id="octave-shift-display">0</span></div>
+                <div class="instructions">Use ↑ and ↓ arrow keys to shift octaves. Space for sustain.</div>
 
-            <!-- Metronome Controls -->
-            <div class="timing-controls-container">
-                <div class="timing-group">
-                    <input type="checkbox" id="metronome-toggle">
-                    <label for="metronome-toggle">Metronome</label>
-                    <label for="metronome-volume-slider">Vol:</label>
-                    <input type="range" id="metronome-volume-slider" min="0" max="1" step="0.01" value="0.7">
-                    <label for="bpm-slider" class="bpm-label">BPM: <span id="bpm-display">120</span></label>
-                    <input type="range" id="bpm-slider" min="60" max="240" step="1" value="120">
+                <div class="timing-controls-container">
+                    <div class="timing-group">
+                        <input type="checkbox" id="metronome-toggle">
+                        <label for="metronome-toggle">Metronome</label>
+                        <label for="metronome-volume-slider">Vol:</label>
+                        <input type="range" id="metronome-volume-slider" min="0" max="1" step="0.01" value="0.7">
+                        <label for="bpm-slider" class="bpm-label">BPM: <span id="bpm-display">120</span></label>
+                        <input type="range" id="bpm-slider" min="60" max="240" step="1" value="120">
+                    </div>
                 </div>
+
+                <div id="note-display">&nbsp;</div>
             </div>
 
-            <div id="note-display">&nbsp;</div>
-
+            <!-- KEYBOARD: Stretches to fill remaining space in fullscreen -->
             <div id="keyboard">
                 <div class="row">
                     <kbd>2</kbd><kbd>3</kbd><kbd>5</kbd><kbd>6</kbd><kbd>7</kbd><kbd>9</kbd><kbd>0</kbd>
@@ -179,17 +180,6 @@
                 </ul>
                 <p><b>Link to repo:</b> <a href="https://github.com/pemmyz/js_keyboardsynth" target="_blank" rel="noopener noreferrer">https://github.com/pemmyz/js_keyboardsynth</a></p>
             </div>
-        </div>
-    </div>
-
-    <!-- MOBILE TOUCH CONTROLS OVERLAY -->
-    <div id="mobile-controls">
-        <div id="mobile-dpad">
-            <button id="mobile-left" class="mobile-control-btn">◀</button>
-            <button id="mobile-right" class="mobile-control-btn">▶</button>
-        </div>
-        <div id="mobile-action">
-            <button id="mobile-up" class="mobile-control-btn">▲</button>
         </div>
     </div>
 
