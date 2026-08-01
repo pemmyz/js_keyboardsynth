@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setDarkMode(true); // Default to dark mode
     }
 
-    // --- HELP PANEL LOGIC (PART 1: Selectors and Functions) ---
+    // --- HELP PANEL LOGIC ---
     const helpToggleBtn = document.getElementById('help-toggle-btn');
     const helpPanel = document.getElementById('help-panel');
     const helpPanelCloseBtn = document.querySelector('.help-panel-close');
@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Audio Setup & State ---
     let audioContext;
-    let audioInitializationPromise = null; // FIX: For robust, race-free initialization
+    let audioInitializationPromise = null;
     const fadeoutTime = 0.2;
     const attackTime = 0.01;
     const releaseTime = fadeoutTime;
@@ -66,6 +66,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const unisonDetuneSlider = document.getElementById('unison-detune-slider');
     const unisonDetuneDisplay = document.getElementById('unison-detune-display');
 
+    // --- Pitch Bend State ---
+    const pitchBendSlider = document.getElementById('pitch-bend-slider');
+    const pitchBendRangeSelect = document.getElementById('pitch-bend-range-select');
+    const pitchBendDisplay = document.getElementById('pitch-bend-display');
+    const pitchBendResetBtn = document.getElementById('pitch-bend-reset-btn');
+
+    let pitchBendValue = 0; // -1 to 1
+    let pitchBendRangeSemitones = 2; // Default range (±2 semitones)
+
     let currentWaveform = waveformSelect.value;
     let octaveShift = 0;
     let programmaticWaveformChange = false;
@@ -80,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let distortionNode;
     let modLfo, modLfoGain, modDelay, modFeedbackGain, modMixNode, modDryGain;
     let stereoSpreadAmount = 0;
-    let isFxBypassed = true; // FIX: Set FX to be OFF by default
+    let isFxBypassed = true;
     let fxBypassToggleBtn;
 
     // --- Metronome State ---
@@ -91,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let nextNoteTime = 0.0;
     
     // --- Core Synth State ---
-    let activeNoteSounds = new Map(); // Robust state tracking for currently playing notes
+    let activeNoteSounds = new Map();
 
     const DEFAULT_WAVEFORM_ON_PARSE = 'square';
     const JSON_EXPORT_COMMENT_HEADER = `// This is Super Deluxe Synth sequencer file,
@@ -227,20 +236,60 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Pitch Bend Helper Functions ---
+    function getPitchBendFactor() {
+        const semitones = pitchBendValue * pitchBendRangeSemitones;
+        return Math.pow(2, semitones / 12);
+    }
+
+    function updatePitchBendDisplay() {
+        if (!pitchBendDisplay) return;
+        const currentSemitones = pitchBendValue * pitchBendRangeSemitones;
+        const sign = currentSemitones > 0 ? '+' : '';
+        pitchBendDisplay.textContent = `${sign}${currentSemitones.toFixed(2)} semitones`;
+    }
+
+    function applyPitchBendToActiveNotes() {
+        if (!audioContext) return;
+        const bendFactor = getPitchBendFactor();
+        const now = audioContext.currentTime;
+
+        const updateSoundFrequency = (sound) => {
+            if (!sound || !sound.carrierOsc || sound._baseFrequency === undefined) return;
+            const bentFreq = sound._baseFrequency * bendFactor;
+
+            // Smooth interpolation (0.008s time constant) prevents clicking while dragging
+            sound.carrierOsc.frequency.setTargetAtTime(bentFreq, now, 0.008);
+
+            if (sound._currentWaveformType === 'fm') {
+                if (sound.modulatorOsc1) sound.modulatorOsc1.frequency.setTargetAtTime(bentFreq * FM_MODULATOR_RATIO, now, 0.008);
+                if (sound.modGain1) sound.modGain1.gain.setTargetAtTime(bentFreq * FM_MODULATION_INDEX_SCALE, now, 0.008);
+            } else if (sound._currentWaveformType === 'ring') {
+                if (sound.modulatorOsc1) sound.modulatorOsc1.frequency.setTargetAtTime(bentFreq * RING_MOD_RATIO, now, 0.008);
+            }
+        };
+
+        activeNoteSounds.forEach(soundsArray => {
+            soundsArray.forEach(updateSoundFrequency);
+        });
+
+        activePlaybackNoteSounds.forEach(soundsArray => {
+            soundsArray.forEach(updateSoundFrequency);
+        });
+    }
+
     // --- Effects Implementation ---
     function updateFxBypassState() {
         if (!audioContext || !effectsChainInput || !masterOutputGain || !fxBypassGain) return;
 
         if (isFxBypassed) {
-            // Route signal directly to master, bypassing effects.
             effectsChainInput.connect(masterOutputGain);
             fxBypassGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.01);
             if(fxBypassToggleBtn) fxBypassToggleBtn.textContent = '🔊 FX Off';
         } else {
-            // Route signal through the effects chain.
             effectsChainInput.disconnect(masterOutputGain);
             fxBypassGain.gain.setTargetAtTime(1, audioContext.currentTime, 0.01);
-             if(fxBypassToggleBtn) fxBypassToggleBtn.textContent = '🔊 FX On';
+            if(fxBypassToggleBtn) fxBypassToggleBtn.textContent = '🔊 FX On';
         }
     }
 
@@ -339,7 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fxBypassGain = audioContext.createGain();
 
         masterOutputGain.connect(audioContext.destination);
-        let currentNode = fxBypassGain; // Start chain from the bypass gate
+        let currentNode = fxBypassGain;
 
         // 1. Distortion
         distortionNode = audioContext.createWaveShaper();
@@ -396,12 +445,12 @@ document.addEventListener('DOMContentLoaded', () => {
         reverbDryGain.gain.value = 1.0;
         currentNode = reverbOutput;
 
-        // Final connections for bypass routing
+        // Final connections
         effectsChainInput.connect(fxBypassGain);
-        currentNode.connect(masterOutputGain); // Connect wet signal to master
+        currentNode.connect(masterOutputGain);
         
         initializeEffectSettings();
-        updateFxBypassState(); // Set initial bypass state
+        updateFxBypassState();
     }
 
 
@@ -429,18 +478,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return notePart + newOctave;
     }
 
-    // FIX: This function is now fully robust against race conditions.
     function initializeAudio() {
         if (audioContext && audioContext.state === 'running') {
             return Promise.resolve();
         }
 
-        // If initialization is already in progress, return the existing promise
         if (audioInitializationPromise) {
             return audioInitializationPromise;
         }
 
-        // Start a new initialization process
         audioInitializationPromise = new Promise((resolve, reject) => {
             try {
                 if (!audioContext) {
@@ -450,10 +496,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
 
-                // This must be called from a user gesture (click, keydown, etc.)
                 audioContext.resume().then(() => {
                     if (audioContext.state === 'running') {
-                        // Setup nodes only on the very first successful resume
                         if (!effectsChainInput) setupEffectsChain();
                         if (Object.keys(oscillatorPools).length === 0) preCreateOscillatorPools();
                         if (!pwmPeriodicWave) {
@@ -476,7 +520,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 reject(err);
             }
         }).finally(() => {
-            // Clear the promise so that if it failed, a new attempt can be made.
             audioInitializationPromise = null;
         });
 
@@ -521,7 +564,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 oscillatorPools[key].push({
                     carrierOsc, modulatorOsc1, mainGain, modGain1, pannerNode,
                     busy: false, key, busyTimeoutId: null, isPlayback: false,
-                    _currentWaveformType: null, _activeNodeConnections: [], _auxNodes: []
+                    _currentWaveformType: null, _activeNodeConnections: [], _auxNodes: [],
+                    _baseFrequency: undefined
                 });
             }
         }
@@ -572,6 +616,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sound.modGain1.gain.cancelScheduledValues(now);
         sound.modGain1.gain.setValueAtTime(0, now);
         sound.busy = false; sound.isPlayback = false; sound._currentWaveformType = null;
+        sound._baseFrequency = undefined;
     }
 
     function playNote(key, forPlayback = false, playbackNoteData = null) {
@@ -579,16 +624,14 @@ document.addEventListener('DOMContentLoaded', () => {
             initializeAudio().then(() => {
                 if (audioContext.state === 'running') playNote(key, forPlayback, playbackNoteData);
             }).catch(err => {
-                // If initialization fails, we can't play the note.
                 console.error("Cannot play note, audio context not ready.", err);
             });
             return null;
         }
         if (!baseKeyToFrequency[key]) return null;
 
-        // Robust Note Handling: Stop any existing note for this key before starting a new one.
         if (activeNoteSounds.has(key)) {
-            stopNote(key, true); // Force stop to override sustain
+            stopNote(key, true);
         }
         
         const now = audioContext.currentTime;
@@ -614,7 +657,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         for (let i = 0; i < currentUnisonVoices; i++) {
             const voiceSound = getFreeOscillator(key);
-             if (!voiceSound) {
+            if (!voiceSound) {
                 console.warn(`No free oscillator for unison voice ${i + 1} of key ${key}`);
                 continue;
             }
@@ -634,7 +677,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             voiceSound.pannerNode.pan.setValueAtTime(panForThisVoice, now);
             const finalFrequency = rootFrequency * Math.pow(2, detuneCentsForThisVoice / 1200);
-            voiceSound.carrierOsc.frequency.setValueAtTime(finalFrequency, now);
+            
+            // Store original unbent frequency for pitch bend calculation
+            voiceSound._baseFrequency = finalFrequency;
+            
+            // Calculate frequency with current pitch bend applied
+            const initialBentFrequency = finalFrequency * getPitchBendFactor();
+            voiceSound.carrierOsc.frequency.setValueAtTime(initialBentFrequency, now);
 
             switch (actualWaveformToUse) {
                 case 'sine': case 'square': case 'sawtooth': case 'triangle':
@@ -650,8 +699,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
                 case 'fm':
                     voiceSound.carrierOsc.type = 'sine'; voiceSound.modulatorOsc1.type = 'sine';
-                    const modulatorFreqFM = finalFrequency * FM_MODULATOR_RATIO;
-                    const modIndexFM = finalFrequency * FM_MODULATION_INDEX_SCALE;
+                    const modulatorFreqFM = initialBentFrequency * FM_MODULATOR_RATIO;
+                    const modIndexFM = initialBentFrequency * FM_MODULATION_INDEX_SCALE;
                     voiceSound.modulatorOsc1.frequency.setValueAtTime(modulatorFreqFM, now);
                     voiceSound.modGain1.gain.setValueAtTime(modIndexFM, now);
                     voiceSound.modulatorOsc1.connect(voiceSound.modGain1);
@@ -682,7 +731,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     break;
                 case 'ring':
                     voiceSound.carrierOsc.type = 'sine'; voiceSound.modulatorOsc1.type = 'sine';
-                    voiceSound.modulatorOsc1.frequency.setValueAtTime(finalFrequency * RING_MOD_RATIO, now);
+                    voiceSound.modulatorOsc1.frequency.setValueAtTime(initialBentFrequency * RING_MOD_RATIO, now);
                     voiceSound.modulatorOsc1.connect(voiceSound.modGain1.gain);
                     voiceSound._activeNodeConnections.push({ source: voiceSound.modulatorOsc1, destination: voiceSound.modGain1, param: 'gain' });
                     voiceSound.carrierOsc.connect(voiceSound.modGain1);
@@ -705,7 +754,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (soundObjectsStarted.length === 0) return null;
         
-        // Add the new sounds to our state map
         activeNoteSounds.set(key, soundObjectsStarted);
 
         if (kbdElements[key]) kbdElements[key].classList.add('active');
@@ -736,7 +784,7 @@ document.addEventListener('DOMContentLoaded', () => {
             soundsToProcess = activeNoteSounds.get(key);
             activeNoteSounds.delete(key);
         } else {
-            return; // Nothing to stop for this key
+            return;
         }
 
         if (!forPlayback && isRecording && activeRecordingNotes[key]) {
@@ -760,7 +808,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!sound) return;
             const now = audioContext.currentTime;
             
-            // Mark as not busy immediately for the pool, but continue fade out
             sound.busy = false;
 
             if (sound.mainGain && sound.mainGain.gain && typeof sound.mainGain.gain.cancelScheduledValues === 'function') {
@@ -773,14 +820,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (sound.busyTimeoutId) clearTimeout(sound.busyTimeoutId);
             sound.busyTimeoutId = setTimeout(() => {
                 if (sound.busyTimeoutId === null) return;
-                forceResetSound(sound); // Full cleanup after fade
+                forceResetSound(sound);
                 checkAndDeactivateVisual(sound.key || key);
             }, (currentRelTime * 1000) + 100);
         });
 
         if (forceStop && !forPlayback) sustainedNotes.delete(key);
         
-        // Visuals are tricky. Let's check after a short delay to let audio settle.
         setTimeout(() => checkAndDeactivateVisual(key), 50);
     }
 
@@ -808,24 +854,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     window.addEventListener('mouseup', (event) => { if (event.button === 0) isMouseButton1Down = false; });
     
-    // --- KEYBOARD EVENT HANDLING (MODIFIED FOR HELP PANEL) ---
+    // --- KEYBOARD EVENT HANDLING ---
     window.addEventListener('keydown', (event) => {
         if (event.target.tagName === 'TEXTAREA' || event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT') return;
 
-        // --- HELP PANEL HOTKEY ---
         if (event.key.toLowerCase() === 'm') {
             event.preventDefault();
             toggleHelpPanel();
-            return; // Prevent other actions when opening help
+            return;
         }
         
         if (event.key === "Escape") {
             event.preventDefault();
-            // If help panel is open, prioritize closing it.
             if (helpPanel && helpPanel.classList.contains('visible')) {
                 hideHelpPanel();
             } else {
-                // Otherwise, do the original panic stop.
                 panicStopAllSoundsAndReset();
             }
             return;
@@ -973,7 +1016,7 @@ document.addEventListener('DOMContentLoaded', () => {
         waveformSelect.blur();
     });
 
-    // --- UPDATED TOUCH & MOUSE EVENT LOGIC ---
+    // --- TOUCH & MOUSE EVENT LOGIC ---
     document.querySelectorAll('kbd').forEach(kbd => {
         const keyVal = kbd.textContent.toLowerCase();
         if (!baseKeyToFrequency[keyVal]) return;
@@ -988,7 +1031,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isPlayingBack) stopNote(keyVal);
         };
 
-        // Desktop mouse events stay on individual elements
         kbd.addEventListener('mousedown', play);
         kbd.addEventListener('mouseup', stop);
         kbd.addEventListener('mouseleave', (e) => {
@@ -1001,11 +1043,9 @@ document.addEventListener('DOMContentLoaded', () => {
                  playNote(keyVal);
              }
         });
-        // We removed individual kbd touch events here to manage them globally instead
     });
 
     // --- PROXIMITY CALCULATOR FOR SMOOTH GAPS ---
-    // This allows touches in the "empty space" to play the closest key.
     function getClosestKeyFromTouch(x, y) {
         let closestKey = null;
         let minDistance = Infinity;
@@ -1013,25 +1053,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!keyboardEl) return null;
 
         const kbRect = keyboardEl.getBoundingClientRect();
-        // Limit calculation only if touching inside or slightly outside the keyboard boundaries (50px padding)
         if (x < kbRect.left - 50 || x > kbRect.right + 50 ||
             y < kbRect.top - 50 || y > kbRect.bottom + 50) {
             return null;
         }
 
-        // 1. First check if it's a direct hit (Fastest/most exact)
         const el = document.elementFromPoint(x, y);
         if (el && el.tagName === 'KBD') {
             const keyText = el.textContent.toLowerCase();
             if (baseKeyToFrequency[keyText]) return keyText;
         }
 
-        // 2. If touching a gap, find the mathematically closest key
         for (const keyVal in kbdElements) {
             const kbdEl = kbdElements[keyVal];
             const rect = kbdEl.getBoundingClientRect();
             
-            // Calculate exact distance to the edges of the box, not just the center
             const dx = Math.max(0, Math.abs(x - (rect.left + rect.width / 2)) - rect.width / 2);
             const dy = Math.max(0, Math.abs(y - (rect.top + rect.height / 2)) - rect.height / 2);
             const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1042,12 +1078,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Accept it if within a reasonable margin of the closest key
         return minDistance <= 50 ? closestKey : null;
     }
     
     // --- GLOBAL TOUCH HANDLERS ---
-    // Attached to the keyboard container to catch gaps on the very first touch
     const keyboardContainer = document.getElementById('keyboard');
     if (keyboardContainer) {
         keyboardContainer.addEventListener('touchstart', (event) => {
@@ -1058,7 +1092,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const touch = event.touches[0];
                 const newKeyOver = getClosestKeyFromTouch(touch.clientX, touch.clientY);
                 if (newKeyOver) {
-                    if (event.cancelable) event.preventDefault(); // Prevents zoom/scroll on keys
+                    if (event.cancelable) event.preventDefault();
                     playNote(newKeyOver);
                     currentTouchedKeyForDrag = newKeyOver;
                 }
@@ -1066,7 +1100,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }, { passive: false });
     }
     
-    // Handles sweeping/dragging fluidly over margins and keys
     document.addEventListener('touchmove', (event) => {
         if (isPlayingBack) return;
         
@@ -1074,12 +1107,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const touch = event.touches[0];
             const newKeyOver = getClosestKeyFromTouch(touch.clientX, touch.clientY);
             
-            // Stop scroll only if we are physically interacting with the keyboard area
             if (newKeyOver || event.target.closest('#keyboard')) {
                 if (event.cancelable) event.preventDefault();
             }
 
-            // Logic to transition keys smoothly during drag
             if (newKeyOver !== currentTouchedKeyForDrag) {
                 if (currentTouchedKeyForDrag) stopNote(currentTouchedKeyForDrag);
                 if (newKeyOver) playNote(newKeyOver);
@@ -1415,13 +1446,11 @@ document.addEventListener('DOMContentLoaded', () => {
             recordBtn.textContent = '⏺️ Record'; activeRecordingNotes = {};
         }
 
-        // Force stop all active sounds by iterating our robust map
         activeNoteSounds.forEach((sounds, key) => {
             stopNote(key, true);
         });
         activeNoteSounds.clear();
         
-        // Also do the low-level pool sweep as a final safety measure
         if (audioContext) {
             for (const poolKey in oscillatorPools) {
                 if (oscillatorPools.hasOwnProperty(poolKey)) {
@@ -1615,6 +1644,43 @@ document.addEventListener('DOMContentLoaded', () => {
         pasteSequenceBtn.blur();
     });
 
+    function bindPitchBendControls() {
+        if (pitchBendSlider) {
+            pitchBendSlider.addEventListener('input', () => {
+                pitchBendValue = parseFloat(pitchBendSlider.value);
+                updatePitchBendDisplay();
+                applyPitchBendToActiveNotes();
+            });
+            // Double click resets pitch bend back to center
+            pitchBendSlider.addEventListener('dblclick', () => {
+                pitchBendSlider.value = "0";
+                pitchBendValue = 0;
+                updatePitchBendDisplay();
+                applyPitchBendToActiveNotes();
+            });
+            pitchBendSlider.addEventListener('change', () => pitchBendSlider.blur());
+        }
+
+        if (pitchBendRangeSelect) {
+            pitchBendRangeSelect.addEventListener('change', () => {
+                pitchBendRangeSemitones = parseFloat(pitchBendRangeSelect.value);
+                updatePitchBendDisplay();
+                applyPitchBendToActiveNotes();
+                pitchBendRangeSelect.blur();
+            });
+        }
+
+        if (pitchBendResetBtn) {
+            pitchBendResetBtn.addEventListener('click', () => {
+                if (pitchBendSlider) pitchBendSlider.value = "0";
+                pitchBendValue = 0;
+                updatePitchBendDisplay();
+                applyPitchBendToActiveNotes();
+                pitchBendResetBtn.blur();
+            });
+        }
+    }
+
     function bindEffectsControls() {
         const reverbMix = document.getElementById('reverb-mix'), reverbMixDisplay = document.getElementById('reverb-mix-display');
         const delayTime = document.getElementById('delay-time'), delayTimeDisplay = document.getElementById('delay-time-display');
@@ -1724,7 +1790,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if(effectsPanelHeading) {
             fxBypassToggleBtn = document.createElement('button');
             fxBypassToggleBtn.id = 'fx-bypass-toggle';
-            // The text content will be set by updateFxBypassState
             fxBypassToggleBtn.style.cssText = `
                 display: block; width: 100%; margin: 15px 0; padding: 10px 12px; font-size: 0.95em;
                 background-color: #007bff; border-color: #0056b3; color: white; border: 1px solid;
@@ -1741,6 +1806,8 @@ document.addEventListener('DOMContentLoaded', () => {
         effectsPanel.querySelectorAll('input, select').forEach(el => el.disabled = false);
         effectsPanel.querySelectorAll('p').forEach(p => p.style.display = 'none');
         bindEffectsControls();
+        bindPitchBendControls();
+        updatePitchBendDisplay();
 
         updateAudioStatus("Initializing..."); 
         updateSequenceDisplay(-1); 
@@ -1761,7 +1828,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initialSetup();
 });
-//test
 
 // ==========================================
 // --- MOBILE FULLSCREEN CONTROLS ---
@@ -1769,11 +1835,9 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('DOMContentLoaded', () => {
     const mobileToggleBtn = document.getElementById('mobile-btn');
 
-    // --- FULLSCREEN LISTENER ---
     function handleFullscreenChange() {
         const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
 
-        // Toggles our CSS flexbox logic which stretches the keyboard
         if (isFullscreen) {
             document.documentElement.classList.add('mobile-mode');
             document.body.classList.add('mobile-mode');
@@ -1783,7 +1847,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- TRIGGER FULLSCREEN ---
     function goFull() {
         const el = document.documentElement;
         if (el.requestFullscreen) {
@@ -1800,6 +1863,5 @@ document.addEventListener('DOMContentLoaded', () => {
         mobileToggleBtn.addEventListener('click', goFull);
     }
     
-    // Check initial state
     handleFullscreenChange();
 });

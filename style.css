@@ -188,6 +188,76 @@ body.light-mode .instructions { color: #555; }
     font-weight: bold;
 }
 
+/* Pitch Bend Styling */
+.pitch-bend-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 15px auto;
+    padding: 10px;
+    max-width: 600px;
+    border: 1px solid #444;
+    border-radius: 8px;
+}
+
+.pitch-bend-group {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.pitch-bend-container select {
+    background-color: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 5px;
+    cursor: pointer;
+}
+
+.pitch-bend-container input[type="range"] {
+    width: 200px;
+}
+
+#pitch-bend-display {
+    min-width: 110px;
+    font-family: monospace;
+    font-weight: bold;
+    text-align: left;
+}
+
+#pitch-bend-reset-btn {
+    background: #3a3a3a;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 0.85em;
+}
+
+#pitch-bend-reset-btn:hover {
+    background: #4a4a4a;
+}
+
+body.light-mode .pitch-bend-container { border-color: #ccc; }
+body.light-mode .pitch-bend-container select {
+    background-color: #eee;
+    color: #000;
+    border-color: #aaa;
+}
+body.light-mode #pitch-bend-reset-btn {
+    background: #e9e9e9;
+    color: #222;
+    border-color: #ccc;
+}
+body.light-mode #pitch-bend-reset-btn:hover {
+    background: #d9d9d9;
+}
+
 .timing-controls-container {
     display: flex;
     justify-content: center;

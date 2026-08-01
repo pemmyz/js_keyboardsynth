@@ -58,6 +58,27 @@
                 <div>Octave Shift: <span id="octave-shift-display">0</span></div>
                 <div class="instructions">Use ↑ and ↓ arrow keys to shift octaves. Space for sustain.</div>
 
+                <!-- PITCH BEND CONTROLS -->
+                <div class="pitch-bend-container">
+                    <div class="pitch-bend-group">
+                        <label for="pitch-bend-range-select">Pitch Bend Range:</label>
+                        <select id="pitch-bend-range-select">
+                            <option value="1">±1 Semitone</option>
+                            <option value="2" selected>±2 Semitones</option>
+                            <option value="3">±3 Semitones</option>
+                            <option value="5">±5 Semitones</option>
+                            <option value="7">±7 Semitones</option>
+                            <option value="12">±12 Semitones (1 Octave)</option>
+                        </select>
+                    </div>
+                    <div class="pitch-bend-group" style="margin-top: 8px;">
+                        <label for="pitch-bend-slider">Pitch Bend:</label>
+                        <input type="range" id="pitch-bend-slider" min="-1" max="1" step="0.001" value="0">
+                        <span id="pitch-bend-display">0.00 semitones</span>
+                        <button id="pitch-bend-reset-btn">Reset</button>
+                    </div>
+                </div>
+
                 <div class="timing-controls-container">
                     <div class="timing-group">
                         <input type="checkbox" id="metronome-toggle">
@@ -174,6 +195,7 @@
                 <ul>
                     <li><b>Keyboard:</b> Use the keys shown on screen to play notes.</li>
                     <li><b>Octave Shift:</b> Use '↑' and '↓' arrow keys.</li>
+                    <li><b>Pitch Bend:</b> Drag the Pitch Bend slider for smooth vibrato/stylophone bends.</li>
                     <li><b>Sustain:</b> Press and hold the Spacebar.</li>
                     <li><b>Sequencer (🎹 Seq):</b> Record, play, copy, and save your melodies.</li>
                     <li><b>Effects (🎛️ FX):</b> Add effects like reverb and delay (work in progress).</li>
